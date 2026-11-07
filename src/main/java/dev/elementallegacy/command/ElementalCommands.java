@@ -38,7 +38,7 @@ public final class ElementalCommands {
         return 1;
     }
 
-    private static int status(CommandSourceStack source) throws com.mojang.exceptions.CommandSyntaxException {
+    private static int status(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
         if (!progress.hasChosenElement()) {
