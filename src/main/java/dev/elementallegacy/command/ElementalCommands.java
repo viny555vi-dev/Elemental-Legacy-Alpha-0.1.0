@@ -29,7 +29,7 @@ public final class ElementalCommands {
             source.sendFailure(Component.literal("Elemento inválido. Escolha: tide, stone, ember ou gale."));
             return 0;
         }
-        ElementalWorldData data = ElementalWorldData.get(player.getServer());
+        ElementalWorldData data = ElementalWorldData.get(source.getServer());
         if (!data.choose(player.getUUID(), element.id())) {
             source.sendFailure(Component.literal("Seu elemento já foi escolhido neste mundo e não pode ser trocado."));
             return 0;
@@ -38,9 +38,9 @@ public final class ElementalCommands {
         return 1;
     }
 
-    private static int status(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int status(CommandSourceStack source) throws com.mojang.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        PlayerProgress progress = ElementalWorldData.get(player.getServer()).get(player.getUUID());
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
         if (!progress.hasChosenElement()) {
             source.sendSuccess(() -> Component.literal("Você ainda não escolheu um caminho. Use /elemental choose <tide|stone|ember|gale>."), false);
             return 1;
