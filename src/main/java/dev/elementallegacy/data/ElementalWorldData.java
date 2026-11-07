@@ -2,7 +2,6 @@ package dev.elementallegacy.data;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -14,7 +13,9 @@ import java.util.UUID;
 
 /** World-scoped player progression. Stored in the Overworld data folder. */
 public final class ElementalWorldData extends SavedData {
-    private static final Codec<Map<String, PlayerProgress>> PLAYERS_CODEC = Codec.unboundedMap(Codec.STRING, PlayerProgress.CODEC);
+    private static final Codec<Map<String, PlayerProgress>> PLAYERS_CODEC =
+            Codec.unboundedMap(Codec.STRING, PlayerProgress.CODEC);
+
     public static final SavedDataType<ElementalWorldData> TYPE = new SavedDataType<>(
             Identifier.fromNamespaceAndPath("elemental_legacy", "player_progress"),
             ElementalWorldData::new,
@@ -35,7 +36,7 @@ public final class ElementalWorldData extends SavedData {
     }
 
     public static ElementalWorldData get(MinecraftServer server) {
-        return server.getDataStorage().computeIfAbsent(TYPE);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     public PlayerProgress get(UUID playerId) {
