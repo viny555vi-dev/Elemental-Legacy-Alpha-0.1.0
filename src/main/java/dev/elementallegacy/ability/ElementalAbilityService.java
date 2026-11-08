@@ -21,6 +21,7 @@ import java.util.UUID;
 public final class ElementalAbilityService {
     private static final Map<UUID, Map<String, Integer>> COOLDOWNS = new HashMap<>();
     private static final Map<UUID, List<ScheduledCue>> ANIMATIONS = new HashMap<>();
+    private static final Map<UUID, Integer> LAST_USE_TICK = new HashMap<>();
 
     private record ScheduledCue(int tick, Runnable action) {}
 
@@ -39,6 +40,7 @@ public final class ElementalAbilityService {
         if (now < readyAt) return "Técnica em recarga: " + String.format(java.util.Locale.ROOT, "%.1f", (readyAt - now) / 20.0) + "s.";
 
         data.spendEnergy(player.getUUID(), ability.energyCost());
+        LAST_USE_TICK.put(player.getUUID(), player.tickCount);
         COOLDOWNS.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>())
                 .put(ability.id(), now + ability.cooldownTicks());
 
@@ -228,6 +230,12 @@ public final class ElementalAbilityService {
         ANIMATIONS.put(id, timed);
     }
 
+    /** Energy regeneration pauses briefly after a technique to preserve its commitment. */
+    public static boolean isRegenerationPaused(ServerPlayer player) {
+        Integer lastUse = LAST_USE_TICK.get(player.getUUID());
+        return lastUse != null && player.tickCount - lastUse < 30;
+    }
+
     /** Advance the caster's queued visual cues once per server player tick. */
     public static void tick(ServerPlayer player) {
         List<ScheduledCue> cues = ANIMATIONS.get(player.getUUID());
@@ -372,5 +380,6 @@ public final class ElementalAbilityService {
     public static void clearPlayer(UUID playerId) {
         COOLDOWNS.remove(playerId);
         ANIMATIONS.remove(playerId);
+        LAST_USE_TICK.remove(playerId);
     }
 }
