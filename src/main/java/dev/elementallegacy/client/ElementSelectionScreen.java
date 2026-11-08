@@ -1,6 +1,6 @@
 package dev.elementallegacy.client;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
@@ -19,12 +19,12 @@ public final class ElementSelectionScreen extends Screen {
   if(Minecraft.getInstance().player!=null)Minecraft.getInstance().player.connection.sendCommand("elemental choose "+e);
   onClose();
  }
- @Override public void render(GuiGraphics g,int mx,int my,float partial){
-  renderBackground(g,mx,my,partial);
-  g.drawCenteredString(font,Component.literal("ELEMENTAL LEGACY"),width/2,height/2-105,0xF2E8D5);
-  g.drawCenteredString(font,Component.literal("Escolha sua dobra. Essa decisão é permanente neste mundo."),width/2,height/2-82,0xC9D2DF);
-  g.drawCenteredString(font,Component.literal("Cada caminho possui técnicas, estilo de combate e progressão próprios."),width/2,height/2-66,0xAAB6C5);
-  super.render(g,mx,my,partial);
+ @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial){
+  super.extractBackground(g,mx,my,partial);
+  g.centeredText(font,"ELEMENTAL LEGACY",width/2,height/2-105,0xF2E8D5);
+  g.centeredText(font,"Escolha sua dobra. Essa decisão é permanente neste mundo.",width/2,height/2-82,0xC9D2DF);
+  g.centeredText(font,"Cada caminho possui técnicas, estilo de combate e progressão próprios.",width/2,height/2-66,0xAAB6C5);
+  super.extractRenderState(g,mx,my,partial);
  }
  @Override public boolean isPauseScreen(){return false;}
 }

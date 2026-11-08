@@ -35,7 +35,7 @@ public final class ElementalAbilityService {
         COOLDOWNS.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>())
                 .put(ability.id(), now + ability.cooldownTicks());
 
-        ServerLevel level = player.serverLevel();
+        ServerLevel level = (ServerLevel) player.level();
         Vec3 look = player.getLookAngle().normalize();
         Vec3 origin = player.getEyePosition();
         AABB searchBox = player.getBoundingBox().inflate(ability.range());

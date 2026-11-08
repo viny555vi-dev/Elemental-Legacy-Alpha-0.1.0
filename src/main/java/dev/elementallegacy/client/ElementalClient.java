@@ -22,15 +22,15 @@ public final class ElementalClient {
  private static String localElement="";
  private static boolean openedForConnection;
  private ElementalClient(){}
- @SubscribeEvent public static void registerKeys(RegisterKeyMappingsEvent e){e.register(POWER_ONE);e.register(POWER_TWO);e.register(OPEN_SELECTION);}
+ public static void registerKeys(RegisterKeyMappingsEvent e){e.register(POWER_ONE);e.register(POWER_TWO);e.register(OPEN_SELECTION);}
  @SubscribeEvent public static void onLogin(ClientPlayerNetworkEvent.LoggingIn e){
   openedForConnection=false;
-  Minecraft.getInstance().execute(()->{if(!openedForConnection&&Minecraft.getInstance().player!=null){Minecraft.getInstance().setScreen(new ElementSelectionScreen());openedForConnection=true;}});
+  Minecraft.getInstance().execute(()->{if(!openedForConnection&&Minecraft.getInstance().player!=null){Minecraft.getInstance().gui.setScreen(new ElementSelectionScreen());openedForConnection=true;}});
  }
  @SubscribeEvent public static void onLogout(ClientPlayerNetworkEvent.LoggingOut e){localElement="";openedForConnection=false;}
  @SubscribeEvent public static void onClientTick(ClientTickEvent.Post e){
-  Minecraft mc=Minecraft.getInstance();if(mc.player==null||mc.screen!=null)return;
-  if(OPEN_SELECTION.consumeClick()){mc.setScreen(new ElementSelectionScreen());return;}
+  Minecraft mc=Minecraft.getInstance();if(mc.player==null||mc.gui.screen()!=null)return;
+  if(OPEN_SELECTION.consumeClick()){mc.gui.setScreen(new ElementSelectionScreen());return;}
   if(!localElement.isBlank()){if(POWER_ONE.consumeClick())useAbility(0);if(POWER_TWO.consumeClick())useAbility(1);}
   else{POWER_ONE.consumeClick();POWER_TWO.consumeClick();}
  }
@@ -42,11 +42,11 @@ public final class ElementalClient {
  }
  public static void setLocalElement(String e){localElement=e;}
  @SubscribeEvent public static void renderHud(RenderGuiEvent.Post e){
-  Minecraft mc=Minecraft.getInstance();if(mc.player==null||mc.options.hideGui||localElement.isBlank())return;
+  Minecraft mc=Minecraft.getInstance();if(mc.player==null||localElement.isBlank())return;
   var g=e.getGuiGraphics();int x=10,y=10;g.fill(x-4,y-4,x+220,y+48,0x990D1420);
-  g.drawString(mc.font,Component.literal("ELEMENTAL LEGACY"),x,y,0xFFE9D8,false);
+  g.text(mc.font,"ELEMENTAL LEGACY",x,y,0xFFE9D8,false);
   String name=Element.byId(localElement).map(Element::displayName).orElse(localElement);
-  g.drawString(mc.font,Component.literal("Dobra: "+name),x,y+13,0xFFFFFFFF,false);
-  g.drawString(mc.font,Component.literal("[Z] Técnica 1   [X] Técnica 2   [R] Seleção"),x,y+27,0xFFB9C7D8,false);
+  g.text(mc.font,Component.literal("Dobra: "+name),x,y+13,0xFFFFFFFF,false);
+  g.text(mc.font,"[Z] Técnica 1   [X] Técnica 2   [R] Seleção",x,y+27,0xFFB9C7D8,false);
  }
 }
