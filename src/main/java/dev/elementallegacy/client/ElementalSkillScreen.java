@@ -30,11 +30,12 @@ public final class ElementalSkillScreen extends Screen {
   onClose();
  }
  @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial){
-  super.extractBackground(g,mx,my,partial);
+  // Screen.extractRenderState already extracts the background exactly once.
+  // Draw custom labels after the superclass has rendered the background and widgets.
+  super.extractRenderState(g,mx,my,partial);
   String name=element==null?"Sem elemento":element.displayName();
   g.centeredText(font,"TÉCNICAS DE "+name.toUpperCase(),width/2,height/2-78,0xFFE9D8);
   g.centeredText(font,"Use Z ou X durante o combate para ativar diretamente.",width/2,height/2-58,0xC9D2DF);
-  super.extractRenderState(g,mx,my,partial);
  }
  @Override public boolean isPauseScreen(){return false;}
 }
