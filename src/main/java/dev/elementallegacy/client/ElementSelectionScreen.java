@@ -19,11 +19,12 @@ public final class ElementSelectionScreen extends Screen {
   onClose();
  }
  @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial){
-  super.extractBackground(g,mx,my,partial);
+  // Screen.extractRenderState already extracts the background exactly once.
+  // Draw custom labels only after the superclass has rendered background/widgets.
+  super.extractRenderState(g,mx,my,partial);
   g.centeredText(font,"ELEMENTAL LEGACY",width/2,height/2-105,0xF2E8D5);
   g.centeredText(font,"Escolha sua dobra. Essa decisão é permanente neste mundo.",width/2,height/2-82,0xC9D2DF);
   g.centeredText(font,"Cada caminho possui técnicas, estilo de combate e progressão próprios.",width/2,height/2-66,0xAAB6C5);
-  super.extractRenderState(g,mx,my,partial);
  }
  @Override public boolean shouldCloseOnEsc(){return false;}
  @Override public boolean isPauseScreen(){return false;}
