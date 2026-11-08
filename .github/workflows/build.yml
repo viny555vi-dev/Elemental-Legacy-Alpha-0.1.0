@@ -26,8 +26,13 @@ jobs:
         with:
           gradle-version: '9.2.1'
 
-      - name: Compilar mod
-        run: gradle build --no-daemon
+      - name: Validar ambiente
+        run: |
+          java -version
+          gradle --version
+
+      - name: Compilar NeoForge 26.3.0.95 do zero
+        run: gradle clean build --no-daemon --refresh-dependencies --stacktrace
 
       - name: Disponibilizar arquivo JAR
         uses: actions/upload-artifact@v4
