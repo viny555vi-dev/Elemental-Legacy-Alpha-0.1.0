@@ -11,12 +11,19 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public final class ElementalAbilityService {
     private static final Map<UUID, Map<String, Integer>> COOLDOWNS = new HashMap<>();
+    private static final Map<UUID, List<ScheduledCue>> ANIMATIONS = new HashMap<>();
+
+    private record ScheduledCue(int tick, Runnable action) {}
+
 
     private ElementalAbilityService() {}
 
@@ -59,12 +66,185 @@ public final class ElementalAbilityService {
 
         // Each technique has its own silhouette and particle choreography rather than
         // sharing one generic burst. Particles are server-emitted so nearby players see it.
-        renderTechnique(level, ability, origin, look);
+        scheduleTechnique(player, level, ability, origin, look);
         if (hits > 0) {
             data.addXp(player.getUUID(), ability.xpReward() * hits);
             return ability.displayName() + " executada! Alvos atingidos: " + hits + ". +" + (ability.xpReward() * hits) + " XP.";
         }
         return ability.displayName() + " executada, mas nenhum inimigo foi atingido. Energia consumida; nenhum XP concedido.";
+    }
+
+    /**
+     * Runs a short, server-authoritative visual timeline. The wind-up, active effect,
+     * impact accent and recovery are emitted on separate ticks so the technique reads
+     * as an animation instead of a single-frame particle dump.
+     */
+    private static void scheduleTechnique(ServerPlayer player, ServerLevel level,
+                                           ElementalAbility ability, Vec3 origin, Vec3 look) {
+        UUID id = player.getUUID();
+        List<ScheduledCue> cues = new ArrayList<>();
+        Vec3 right = look.cross(new Vec3(0.0D, 1.0D, 0.0D)).normalize();
+        if (right.lengthSqr() < 0.001D) right = new Vec3(1.0D, 0.0D, 0.0D);
+        Vec3 up = right.cross(look).normalize();
+        Vec3 hands = origin.add(look.scale(0.35D)).add(0.0D, -0.35D, 0.0D);
+
+        // Each element has its own anticipation language and silhouette.
+        switch (ability) {
+            case FLAME_BURST -> {
+                cues.add(new ScheduledCue(0, () -> {
+                    emit(level, ParticleTypes.FLAME, hands, 12, 0.18D, 0.18D, 0.18D, 0.025D);
+                    emit(level, ParticleTypes.SMOKE, hands, 5, 0.12D, 0.12D, 0.12D, 0.01D);
+                }));
+                cues.add(new ScheduledCue(3, () -> {
+                    for (int ring = 0; ring < 2; ring++) {
+                        for (int i = 0; i < 12; i++) {
+                            double a = i * Math.PI / 6.0D + ring * Math.PI;
+                            Vec3 p = hands.add(Math.cos(a) * (0.22D + ring * 0.12D),
+                                    Math.sin(a) * 0.18D, Math.sin(a) * (0.22D + ring * 0.12D));
+                            emit(level, ParticleTypes.FLAME, p, 2, 0.025D, 0.025D, 0.025D, 0.01D);
+                        }
+                    }
+                }));
+                cues.add(new ScheduledCue(7, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(13, () -> {
+                    Vec3 impact = origin.add(look.scale(4.4D));
+                    emit(level, ParticleTypes.FLAME, impact, 20, 0.5D, 0.35D, 0.5D, 0.08D);
+                    emit(level, ParticleTypes.LARGE_SMOKE, impact, 8, 0.35D, 0.25D, 0.35D, 0.025D);
+                }));
+                cues.add(new ScheduledCue(20, () -> emit(level, ParticleTypes.SMOKE,
+                        origin.add(look.scale(4.4D)), 7, 0.35D, 0.18D, 0.35D, 0.008D)));
+            }
+            case FIRE_WHIP -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.FLAME, hands, 10, 0.2D, 0.15D, 0.2D, 0.02D)));
+                cues.add(new ScheduledCue(4, () -> {
+                    for (int i = 0; i < 9; i++) {
+                        Vec3 p = hands.add(right.scale((i - 4) * 0.12D)).add(up.scale(i * 0.07D));
+                        emit(level, ParticleTypes.FLAME, p, 3, 0.035D, 0.035D, 0.035D, 0.015D);
+                    }
+                }));
+                cues.add(new ScheduledCue(7, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(13, () -> emit(level, ParticleTypes.FLAME,
+                        origin.add(look.scale(2.2D)), 16, 0.7D, 0.2D, 0.7D, 0.07D)));
+                cues.add(new ScheduledCue(18, () -> emit(level, ParticleTypes.SMOKE,
+                        origin.add(look.scale(2.2D)), 8, 0.45D, 0.15D, 0.45D, 0.01D)));
+            }
+            case WATER_BURST -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.BUBBLE, hands, 12, 0.2D, 0.2D, 0.2D, 0.02D)));
+                cues.add(new ScheduledCue(4, () -> {
+                    for (int i = 0; i < 16; i++) {
+                        double a = i * Math.PI / 8.0D;
+                        Vec3 p = hands.add(Math.cos(a) * 0.38D, Math.sin(a) * 0.22D, Math.sin(a) * 0.38D);
+                        emit(level, ParticleTypes.SPLASH, p, 2, 0.025D, 0.025D, 0.025D, 0.01D);
+                    }
+                }));
+                cues.add(new ScheduledCue(7, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(14, () -> emit(level, ParticleTypes.SPLASH,
+                        origin.add(look.scale(4.5D)), 22, 0.6D, 0.35D, 0.6D, 0.08D)));
+                cues.add(new ScheduledCue(19, () -> emit(level, ParticleTypes.BUBBLE,
+                        origin.add(look.scale(4.5D)), 10, 0.35D, 0.2D, 0.35D, 0.015D)));
+            }
+            case ICE_BIND -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.SNOWFLAKE, hands, 10, 0.18D, 0.18D, 0.18D, 0.01D)));
+                cues.add(new ScheduledCue(5, () -> {
+                    Vec3 center = origin.add(look.scale(2.8D));
+                    for (int i = 0; i < 12; i++) {
+                        double a = i * Math.PI / 6.0D;
+                        Vec3 p = center.add(Math.cos(a) * 0.55D, -0.45D + i * 0.07D, Math.sin(a) * 0.55D);
+                        emit(level, ParticleTypes.SNOWFLAKE, p, 3, 0.025D, 0.05D, 0.025D, 0.01D);
+                    }
+                }));
+                cues.add(new ScheduledCue(8, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(15, () -> emit(level, ParticleTypes.END_ROD,
+                        origin.add(look.scale(2.8D)), 12, 0.35D, 0.55D, 0.35D, 0.015D)));
+                cues.add(new ScheduledCue(21, () -> emit(level, ParticleTypes.CLOUD,
+                        origin.add(look.scale(2.8D)), 8, 0.3D, 0.2D, 0.3D, 0.01D)));
+            }
+            case ROCK_STRIKE -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(0.5D)).add(0.0D, -0.8D, 0.0D), 12, 0.25D, 0.12D, 0.25D, 0.025D)));
+                cues.add(new ScheduledCue(4, () -> {
+                    Vec3 ground = origin.add(look.scale(1.0D)).add(0.0D, -0.85D, 0.0D);
+                    emit(level, ParticleTypes.CRIT, ground, 10, 0.3D, 0.12D, 0.3D, 0.08D);
+                    emit(level, ParticleTypes.POOF, ground, 8, 0.25D, 0.12D, 0.25D, 0.025D);
+                }));
+                cues.add(new ScheduledCue(7, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(13, () -> emit(level, ParticleTypes.CRIT,
+                        origin.add(look.scale(3.8D)), 18, 0.45D, 0.35D, 0.45D, 0.15D)));
+                cues.add(new ScheduledCue(19, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(3.8D)), 9, 0.3D, 0.15D, 0.3D, 0.025D)));
+            }
+            case SEISMIC_WAVE -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(0.0D, -0.8D, 0.0D), 10, 0.3D, 0.08D, 0.3D, 0.015D)));
+                cues.add(new ScheduledCue(5, () -> {
+                    Vec3 ground = origin.add(look.scale(1.2D)).add(0.0D, -0.85D, 0.0D);
+                    for (int i = 0; i < 16; i++) {
+                        double a = i * Math.PI / 8.0D;
+                        emit(level, ParticleTypes.CRIT, ground.add(Math.cos(a) * 0.65D, 0.0D,
+                                Math.sin(a) * 0.65D), 2, 0.04D, 0.05D, 0.04D, 0.05D);
+                    }
+                }));
+                cues.add(new ScheduledCue(8, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(15, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(4.0D)).add(0.0D, -0.75D, 0.0D), 20, 0.8D, 0.12D, 0.8D, 0.08D)));
+                cues.add(new ScheduledCue(22, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(4.0D)).add(0.0D, -0.75D, 0.0D), 8, 0.5D, 0.08D, 0.5D, 0.015D)));
+            }
+            case AIR_BLAST -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.CLOUD, hands, 10, 0.18D, 0.12D, 0.18D, 0.015D)));
+                cues.add(new ScheduledCue(4, () -> {
+                    for (int i = -2; i <= 2; i++) {
+                        Vec3 p = hands.add(right.scale(i * 0.13D));
+                        emit(level, ParticleTypes.CLOUD, p, 4, 0.035D, 0.035D, 0.035D, 0.02D);
+                    }
+                }));
+                cues.add(new ScheduledCue(7, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(13, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(4.2D)), 16, 0.55D, 0.35D, 0.55D, 0.1D)));
+                cues.add(new ScheduledCue(19, () -> emit(level, ParticleTypes.CLOUD,
+                        origin.add(look.scale(4.2D)), 10, 0.45D, 0.2D, 0.45D, 0.015D)));
+            }
+            case CYCLONE -> {
+                cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.CLOUD, hands, 12, 0.2D, 0.2D, 0.2D, 0.025D)));
+                cues.add(new ScheduledCue(5, () -> {
+                    Vec3 center = origin.add(look.scale(2.7D));
+                    for (int i = 0; i < 18; i++) {
+                        double a = i * Math.PI / 9.0D;
+                        Vec3 p = center.add(Math.cos(a) * 0.65D, -0.5D + i * 0.055D, Math.sin(a) * 0.65D);
+                        emit(level, ParticleTypes.CLOUD, p, 3, 0.035D, 0.05D, 0.035D, 0.025D);
+                    }
+                }));
+                cues.add(new ScheduledCue(8, () -> renderTechnique(level, ability, origin, look)));
+                cues.add(new ScheduledCue(16, () -> emit(level, ParticleTypes.CLOUD,
+                        origin.add(look.scale(2.7D)).add(0.0D, 1.0D, 0.0D), 18, 0.5D, 0.8D, 0.5D, 0.07D)));
+                cues.add(new ScheduledCue(24, () -> emit(level, ParticleTypes.POOF,
+                        origin.add(look.scale(2.7D)), 12, 0.55D, 0.35D, 0.55D, 0.025D)));
+            }
+        }
+
+        int startTick = player.tickCount;
+        List<ScheduledCue> timed = new ArrayList<>();
+        for (ScheduledCue cue : cues) timed.add(new ScheduledCue(startTick + cue.tick(), cue.action()));
+        ANIMATIONS.put(id, timed);
+    }
+
+    /** Advance the caster's queued visual cues once per server player tick. */
+    public static void tick(ServerPlayer player) {
+        List<ScheduledCue> cues = ANIMATIONS.get(player.getUUID());
+        if (cues == null) return;
+        if (!player.isAlive()) {
+            ANIMATIONS.remove(player.getUUID());
+            return;
+        }
+        Iterator<ScheduledCue> iterator = cues.iterator();
+        while (iterator.hasNext()) {
+            ScheduledCue cue = iterator.next();
+            if (player.tickCount >= cue.tick()) {
+                cue.action().run();
+                iterator.remove();
+            }
+        }
+        if (cues.isEmpty()) ANIMATIONS.remove(player.getUUID());
     }
 
     private static void renderTechnique(ServerLevel level, ElementalAbility ability, Vec3 origin, Vec3 look) {
@@ -191,5 +371,6 @@ public final class ElementalAbilityService {
 
     public static void clearPlayer(UUID playerId) {
         COOLDOWNS.remove(playerId);
+        ANIMATIONS.remove(playerId);
     }
 }
