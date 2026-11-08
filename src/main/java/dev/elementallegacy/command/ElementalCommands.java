@@ -17,6 +17,8 @@ public final class ElementalCommands {
 
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("elemental")
+                .then(Commands.literal("sync")
+                        .executes(context -> sync(context.getSource())))
                 .then(Commands.literal("choose")
                         .then(Commands.argument("element", StringArgumentType.word())
                                 .suggests((context, builder) -> {
@@ -52,6 +54,16 @@ public final class ElementalCommands {
                                 })
                                 .executes(context -> use(context.getSource(), StringArgumentType.getString(context, "ability")))))
         );
+    }
+
+    private static int sync(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
+        String response = progress.hasChosenElement()
+                ? "ELEMENTAL_SYNC|chosen|" + progress.elementId()
+                : "ELEMENTAL_SYNC|unchosen";
+        source.sendSuccess(() -> Component.literal(response), false);
+        return 1;
     }
 
     private static int choose(CommandSourceStack source, String requested) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
