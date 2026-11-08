@@ -88,6 +88,8 @@ public final class ElementalAbilityService {
         Vec3 right = look.cross(new Vec3(0.0D, 1.0D, 0.0D)).normalize();
         if (right.lengthSqr() < 0.001D) right = new Vec3(1.0D, 0.0D, 0.0D);
         Vec3 up = right.cross(look).normalize();
+        final Vec3 rightBasis = right;
+        final Vec3 upBasis = up;
         Vec3 hands = origin.add(look.scale(0.35D)).add(0.0D, -0.35D, 0.0D);
 
         // Each element has its own anticipation language and silhouette.
@@ -120,7 +122,7 @@ public final class ElementalAbilityService {
                 cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.FLAME, hands, 10, 0.2D, 0.15D, 0.2D, 0.02D)));
                 cues.add(new ScheduledCue(4, () -> {
                     for (int i = 0; i < 9; i++) {
-                        Vec3 p = hands.add(right.scale((i - 4) * 0.12D)).add(up.scale(i * 0.07D));
+                        Vec3 p = hands.add(rightBasis.scale((i - 4) * 0.12D)).add(upBasis.scale(i * 0.07D));
                         emit(level, ParticleTypes.FLAME, p, 3, 0.035D, 0.035D, 0.035D, 0.015D);
                     }
                 }));
@@ -196,7 +198,7 @@ public final class ElementalAbilityService {
                 cues.add(new ScheduledCue(0, () -> emit(level, ParticleTypes.CLOUD, hands, 10, 0.18D, 0.12D, 0.18D, 0.015D)));
                 cues.add(new ScheduledCue(4, () -> {
                     for (int i = -2; i <= 2; i++) {
-                        Vec3 p = hands.add(right.scale(i * 0.13D));
+                        Vec3 p = hands.add(rightBasis.scale(i * 0.13D));
                         emit(level, ParticleTypes.CLOUD, p, 4, 0.035D, 0.035D, 0.035D, 0.02D);
                     }
                 }));
