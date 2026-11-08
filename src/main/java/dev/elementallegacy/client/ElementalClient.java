@@ -13,12 +13,12 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
-import org.lwjgl.glfw.GLFW;
+import net.neoforged.neoforge.client.settings.KeyConflictContext;
 @EventBusSubscriber(modid=ElementalLegacy.MOD_ID,value=Dist.CLIENT)
 public final class ElementalClient {
- private static final KeyMapping POWER_ONE=new KeyMapping("key.elemental_legacy.power_one",InputConstants.Type.KEYSYM,GLFW.GLFW_KEY_Z,"key.categories.elemental_legacy");
- private static final KeyMapping POWER_TWO=new KeyMapping("key.elemental_legacy.power_two",InputConstants.Type.KEYSYM,GLFW.GLFW_KEY_X,"key.categories.elemental_legacy");
- private static final KeyMapping OPEN_SELECTION=new KeyMapping("key.elemental_legacy.open_selection",InputConstants.Type.KEYSYM,GLFW.GLFW_KEY_R,"key.categories.elemental_legacy");
+ private static final KeyMapping POWER_ONE=new KeyMapping("key.elemental_legacy.power_one",KeyConflictContext.IN_GAME,InputConstants.KEY_Z,KeyMapping.Category.MISC);
+ private static final KeyMapping POWER_TWO=new KeyMapping("key.elemental_legacy.power_two",KeyConflictContext.IN_GAME,InputConstants.KEY_X,KeyMapping.Category.MISC);
+ private static final KeyMapping OPEN_SELECTION=new KeyMapping("key.elemental_legacy.open_selection",KeyConflictContext.IN_GAME,InputConstants.KEY_R,KeyMapping.Category.MISC);
  private static String localElement="";
  private static boolean openedForConnection;
  private ElementalClient(){}
