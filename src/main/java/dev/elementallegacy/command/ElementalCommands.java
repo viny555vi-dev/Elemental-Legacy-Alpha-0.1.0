@@ -132,7 +132,7 @@ public final class ElementalCommands {
             return 0;
         }
         String result = ElementalAbilityService.use(player, ability);
-        boolean success = result.startsWith(ability.displayName() + " executada!");
+        boolean success = result.startsWith(ability.displayName() + " executada");
         if (success) source.sendSuccess(() -> Component.literal(result), false);
         else source.sendFailure(Component.literal(result));
         return success ? 1 : 0;
