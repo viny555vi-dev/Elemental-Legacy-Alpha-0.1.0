@@ -1,4 +1,5 @@
 package dev.elementallegacy.client;
+
 import com.mojang.blaze3d.platform.InputConstants;
 import dev.elementallegacy.ElementalLegacy;
 import dev.elementallegacy.ability.ElementalAbility;
@@ -30,22 +31,33 @@ public final class ElementalClient {
  private static boolean openedForConnection;
  private ElementalClient(){}
  @SubscribeEvent public static void registerKeys(RegisterKeyMappingsEvent e){e.register(POWER_ONE);e.register(POWER_TWO);e.register(OPEN_SELECTION);}
- @SubscribeEvent public static void onLogin(ClientPlayerNetworkEvent.LoggingIn e){
+ @SubscribeEvent public static void onLogout(ClientPlayerNetworkEvent.LoggingOut e){
+  localElement="";
   openedForConnection=false;
+ }
+ @SubscribeEvent public static void onClientTick(ClientTickEvent.Post e){
   Minecraft mc=Minecraft.getInstance();
-  mc.execute(()->{
-   if(openedForConnection||mc.player==null)return;
+  if(mc.player==null||mc.level==null)return;
+
+  // Check after the player and world are fully available. Login events can fire
+  // before the client has finished attaching the local player/world.
+  if(!openedForConnection){
+   if(mc.gui.screen()!=null)return;
    localElement=loadSavedElement(mc);
    if(localElement.isBlank())mc.gui.setScreen(new ElementSelectionScreen());
    openedForConnection=true;
-  });
- }
- @SubscribeEvent public static void onLogout(ClientPlayerNetworkEvent.LoggingOut e){localElement="";openedForConnection=false;}
- @SubscribeEvent public static void onClientTick(ClientTickEvent.Post e){
-  Minecraft mc=Minecraft.getInstance();if(mc.player==null||mc.gui.screen()!=null)return;
+   return;
+  }
+
+  if(mc.gui.screen()!=null)return;
   if(OPEN_SELECTION.consumeClick()){mc.gui.setScreen(new ElementalSkillScreen());return;}
-  if(!localElement.isBlank()){if(POWER_ONE.consumeClick())useAbility(0);if(POWER_TWO.consumeClick())useAbility(1);}
-  else{POWER_ONE.consumeClick();POWER_TWO.consumeClick();}
+  if(!localElement.isBlank()){
+   if(POWER_ONE.consumeClick())useAbility(0);
+   if(POWER_TWO.consumeClick())useAbility(1);
+  }else{
+   POWER_ONE.consumeClick();
+   POWER_TWO.consumeClick();
+  }
  }
  private static void useAbility(int index){
   if(Minecraft.getInstance().player==null)return;

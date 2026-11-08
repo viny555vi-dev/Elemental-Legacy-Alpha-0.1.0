@@ -12,7 +12,6 @@ public final class ElementSelectionScreen extends Screen {
   addRenderableWidget(Button.builder(Component.literal("TERRA  •  Rocha"),b->choose("stone")).bounds(r,t,w,28).build());
   addRenderableWidget(Button.builder(Component.literal("FOGO  •  Brasa"),b->choose("ember")).bounds(l,t+36,w,28).build());
   addRenderableWidget(Button.builder(Component.literal("AR  •  Vendaval"),b->choose("gale")).bounds(r,t+36,w,28).build());
-  addRenderableWidget(Button.builder(Component.literal("Continuar sem escolher"),b->onClose()).bounds(width/2-95,t+82,190,20).build());
  }
  private void choose(String e){
   ElementalClient.setLocalElement(e);
@@ -26,5 +25,6 @@ public final class ElementSelectionScreen extends Screen {
   g.centeredText(font,"Cada caminho possui técnicas, estilo de combate e progressão próprios.",width/2,height/2-66,0xAAB6C5);
   super.extractRenderState(g,mx,my,partial);
  }
+ @Override public boolean shouldCloseOnEsc(){return false;}
  @Override public boolean isPauseScreen(){return false;}
 }
