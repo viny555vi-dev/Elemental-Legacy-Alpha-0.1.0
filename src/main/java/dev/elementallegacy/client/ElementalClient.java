@@ -29,7 +29,7 @@ public final class ElementalClient {
  private static String localElement="";
  private static boolean openedForConnection;
  private ElementalClient(){}
- public static void registerKeys(RegisterKeyMappingsEvent e){e.register(POWER_ONE);e.register(POWER_TWO);e.register(OPEN_SELECTION);}
+ @SubscribeEvent public static void registerKeys(RegisterKeyMappingsEvent e){e.register(POWER_ONE);e.register(POWER_TWO);e.register(OPEN_SELECTION);}
  @SubscribeEvent public static void onLogin(ClientPlayerNetworkEvent.LoggingIn e){
   openedForConnection=false;
   Minecraft mc=Minecraft.getInstance();
