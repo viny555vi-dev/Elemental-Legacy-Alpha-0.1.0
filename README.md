@@ -6,73 +6,60 @@ Elemental Legacy is an independent project inspired by broad elemental fantasy a
 
 ## Current development status
 
-`0.1.0-alpha.1` is the first backend prototype. It establishes:
+`0.1.0-alpha.2` adds the first playable server-side combat slice:
 
-- NeoForge 26.3 / Minecraft 26.3 build configuration (Java 25 toolchain).
-- Four original paths: Tide, Stone, Ember, Gale.
-- World-scoped storage for each player's permanent element and progression.
-- `/elemental choose <tide|stone|ember|gale>` (one-time choice per world).
-- `/elemental status` (level, XP, energy).
-- Natural energy regeneration.
-- A 50-level XP curve foundation.
+- Four original elemental paths: Tide (water), Stone (earth), Ember (fire), Gale (air).
+- Permanent per-player elemental choice saved in the world.
+- Two original combat techniques for each element (eight total).
+- Skill listing, selection and activation commands with tab suggestions.
+- Server-side target detection, damage, knockback, fire ignition, particles, energy costs and cooldowns.
+- XP awarded only when a technique successfully damages a living target.
+- Natural energy regeneration (1.5 energy per second).
+- Persistent level, XP, energy and selected technique; 50-level progression foundation.
+- Multiplayer actions are executed and validated on the server.
 
-**This is not yet a complete playable release.** The first-choice screen, keybinds, radial selector, abilities, skill trees, effects, and multiplayer ability synchronization remain planned work.
+This is an early combat prototype, not the complete planned RPG. It does not yet include a first-run GUI, keybinds, radial selector, custom HUD, skill tree, custom projectile entities, animations, or dedicated multiplayer playtesting.
 
-## Build requirements
+## Commands
 
-- Minecraft Java 26.3
-- NeoForge 26.3 (configured in `gradle.properties`)
-- Java Development Kit 25
-- Gradle 9.2.1
-
-The GitHub Actions workflow installs Gradle 9.2.1 and Java 25 automatically, then runs `gradle build`. The compiled mod is published as the `Elemental-Legacy-JAR` workflow artifact.
-
-For a local build, install JDK 25 and Gradle 9.2.1, then run:
-
-```bash
-gradle build
-```
-
-The mod JAR is generated in `build/libs/`.
-
-## Prototype commands
-
+Choose once per world:
 ```text
 /elemental choose tide
 /elemental choose stone
 /elemental choose ember
 /elemental choose gale
+```
+
+Combat:
+```text
+/elemental skills
+/elemental select <ability_id>
+/elemental use
+/elemental use <ability_id>
 /elemental status
 ```
 
-The element choice is stored per world and cannot be overwritten by another choice. Disconnecting, dying, changing dimensions, or reinstalling the client does not reset the path.
+Technique IDs:
+- Tide: `water_burst`, `ice_bind`
+- Stone: `rock_strike`, `seismic_wave`
+- Ember: `flame_burst`, `fire_whip`
+- Gale: `air_blast`, `cyclone`
 
-## Design decisions confirmed
+Aim at nearby hostile or neutral living entities and activate a technique. Techniques affect living entities in a forward cone, consume energy and enter cooldown. A successful hit awards XP. A miss consumes energy and cooldown but grants no XP. Fire techniques ignite targets; air techniques apply stronger knockback.
 
-- 50 mastery levels per elemental path.
-- Natural energy regeneration (prototype: 1.5 energy per second).
-- Multiplayer support, with each player choosing and progressing independently.
-- Element selection is permanent for that player in that world.
-- XP should reward meaningful ability use, not idle or spam repetition.
+## Build requirements
 
-## Planned milestones
+- Minecraft Java 26.3
+- NeoForge 26.3.0.95
+- Java Development Kit 25
+- Gradle 9.2.1
 
-1. **Foundation:** build, persistent profile, permanent path selection, server-authoritative progression.
-2. **First-run UX:** custom four-path selection screen, profile sync, clear confirmation.
-3. **Controls:** configurable activation key, radial skill selector, quick slots, cooldown/energy feedback.
-4. **Combat vertical slice:** two original abilities per path with server validation, effects, hit detection, costs, and XP.
-5. **RPG progression:** 50 levels, unlock nodes, ability upgrades, mastery milestones, anti-farm XP rules.
-6. **Content expansion:** full ability trees, movement, defense, utility, visual/audio polish.
-7. **Multiplayer QA:** dedicated server, latency, persistence, permissions, exploit prevention, balance.
+GitHub Actions builds the mod and publishes the JAR as the `Elemental-Legacy-JAR` artifact.
 
-## Project structure
+## Project status and next milestones
 
-- `element/` — elemental identity and metadata.
-- `data/` — persistent world/player progression.
-- `command/` — development and admin commands.
-- `progression/` — XP, energy, and tick rules.
-- `docs/` — design and implementation notes.
+The combat slice is server-authoritative and designed for multiplayer, but it still requires in-game client and dedicated-server testing. Planned work includes client controls, visual selection UI, HUD, skill progression/unlocks, richer movement and defense, custom projectiles, sound/animation polish, and balance testing.
 
 ## License
 
-Project code is licensed under MIT. Minecraft and third-party trademarks/assets remain the property of their respective owners. No third-party mod assets are included.
+Project code is licensed under MIT. Minecraft and third-party trademarks/assets remain the property of their owners. No third-party mod assets are included.

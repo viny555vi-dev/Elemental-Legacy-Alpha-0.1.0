@@ -66,6 +66,13 @@ public final class ElementalWorldData extends SavedData {
         if (!updated.equals(current)) put(playerId, updated);
     }
 
+    public boolean spendEnergy(UUID playerId, float amount) {
+        PlayerProgress current = get(playerId);
+        if (!current.hasChosenElement() || amount < 0.0F || current.energy() < amount) return false;
+        put(playerId, current.withEnergy(current.energy() - amount));
+        return true;
+    }
+
     public void regenerateEnergy(UUID playerId, float amount) {
         PlayerProgress current = get(playerId);
         if (!current.hasChosenElement() || current.energy() >= PlayerProgress.MAX_ENERGY) return;

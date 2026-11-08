@@ -1,6 +1,8 @@
 package dev.elementallegacy.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
+import dev.elementallegacy.ability.ElementalAbility;
+import dev.elementallegacy.ability.ElementalAbilityService;
 import dev.elementallegacy.data.ElementalWorldData;
 import dev.elementallegacy.data.PlayerProgress;
 import dev.elementallegacy.element.Element;
@@ -17,8 +19,38 @@ public final class ElementalCommands {
         event.getDispatcher().register(Commands.literal("elemental")
                 .then(Commands.literal("choose")
                         .then(Commands.argument("element", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    builder.suggest("tide"); builder.suggest("stone"); builder.suggest("ember"); builder.suggest("gale");
+                                    return builder.buildFuture();
+                                })
                                 .executes(context -> choose(context.getSource(), StringArgumentType.getString(context, "element")))))
                 .then(Commands.literal("status").executes(context -> status(context.getSource())))
+                .then(Commands.literal("skills").executes(context -> skills(context.getSource())))
+                .then(Commands.literal("select")
+                        .then(Commands.argument("ability", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    ServerPlayer player = context.getSource().getPlayer();
+                                    if (player != null) {
+                                        PlayerProgress progress = ElementalWorldData.get(context.getSource().getServer()).get(player.getUUID());
+                                        Element.byId(progress.elementId()).ifPresent(element ->
+                                                ElementalAbility.forElement(element).forEach(ability -> builder.suggest(ability.id())));
+                                    }
+                                    return builder.buildFuture();
+                                })
+                                .executes(context -> select(context.getSource(), StringArgumentType.getString(context, "ability")))))
+                .then(Commands.literal("use")
+                        .executes(context -> useSelected(context.getSource()))
+                        .then(Commands.argument("ability", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    ServerPlayer player = context.getSource().getPlayer();
+                                    if (player != null) {
+                                        PlayerProgress progress = ElementalWorldData.get(context.getSource().getServer()).get(player.getUUID());
+                                        Element.byId(progress.elementId()).ifPresent(element ->
+                                                ElementalAbility.forElement(element).forEach(ability -> builder.suggest(ability.id())));
+                                    }
+                                    return builder.buildFuture();
+                                })
+                                .executes(context -> use(context.getSource(), StringArgumentType.getString(context, "ability")))))
         );
     }
 
@@ -49,5 +81,60 @@ public final class ElementalCommands {
         int required = progress.level() >= PlayerProgress.MAX_LEVEL ? 0 : PlayerProgress.xpToNextLevel(progress.level());
         source.sendSuccess(() -> Component.literal("Caminho: " + element.displayName() + " | Nível: " + progress.level() + "/50 | XP: " + progress.xp() + "/" + required + " | Energia: " + Math.round(progress.energy()) + "/100"), false);
         return 1;
+    }
+
+    private static int skills(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
+        Element element = Element.byId(progress.elementId()).orElse(null);
+        if (element == null) {
+            source.sendFailure(Component.literal("Escolha seu elemento primeiro com /elemental choose <tide|stone|ember|gale>."));
+            return 0;
+        }
+        source.sendSuccess(() -> Component.literal("Técnicas de " + element.displayName() + ":"), false);
+        for (ElementalAbility ability : ElementalAbility.forElement(element)) {
+            source.sendSuccess(() -> Component.literal("- " + ability.id() + " — " + ability.displayName()
+                    + " | custo " + ability.energyCost() + " energia | recarga " + (ability.cooldownTicks() / 20)
+                    + "s | dano " + ability.damage() + " | " + ability.description()), false);
+        }
+        source.sendSuccess(() -> Component.literal("Use /elemental select <id> e depois /elemental use, ou /elemental use <id>."), false);
+        return 1;
+    }
+
+    private static int select(CommandSourceStack source, String requested) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
+        ElementalAbility ability = ElementalAbility.byId(requested).orElse(null);
+        if (ability == null || !progress.hasChosenElement() || !ability.element().id().equals(progress.elementId())) {
+            source.sendFailure(Component.literal("Técnica inválida ou incompatível com seu elemento. Use /elemental skills."));
+            return 0;
+        }
+        ElementalWorldData.get(source.getServer()).put(player.getUUID(), progress.withSelectedAbility(ability.id()));
+        source.sendSuccess(() -> Component.literal("Técnica selecionada: " + ability.displayName() + ". Use /elemental use para executá-la."), false);
+        return 1;
+    }
+
+    private static int useSelected(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
+        if (progress.selectedAbility().isBlank()) {
+            source.sendFailure(Component.literal("Nenhuma técnica selecionada. Use /elemental skills e /elemental select <id>."));
+            return 0;
+        }
+        return use(source, progress.selectedAbility());
+    }
+
+    private static int use(CommandSourceStack source, String requested) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        ElementalAbility ability = ElementalAbility.byId(requested).orElse(null);
+        if (ability == null) {
+            source.sendFailure(Component.literal("Técnica desconhecida. Consulte /elemental skills."));
+            return 0;
+        }
+        String result = ElementalAbilityService.use(player, ability);
+        boolean success = result.startsWith(ability.displayName() + " executada!");
+        if (success) source.sendSuccess(() -> Component.literal(result), false);
+        else source.sendFailure(Component.literal(result));
+        return success ? 1 : 0;
     }
 }
