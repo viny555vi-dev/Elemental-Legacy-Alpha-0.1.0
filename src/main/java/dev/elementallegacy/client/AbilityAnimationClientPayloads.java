@@ -7,8 +7,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
 
-@EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT,
-        bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
 public final class AbilityAnimationClientPayloads {
     private AbilityAnimationClientPayloads() {}
 
