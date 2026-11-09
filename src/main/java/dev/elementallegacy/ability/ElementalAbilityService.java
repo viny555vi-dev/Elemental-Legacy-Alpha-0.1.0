@@ -14,6 +14,7 @@ import net.minecraft.world.item.SwingAnimationType;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import java.util.*;
@@ -22,7 +23,9 @@ public final class ElementalAbilityService {
     private static final Map<UUID,Map<String,Integer>> COOLDOWNS=new HashMap<>();
     private static final Map<UUID,List<ScheduledCue>> ANIMATIONS=new HashMap<>();
     private static final Map<UUID,Integer> LAST_USE_TICK=new HashMap<>();
+    private static final Map<UUID,List<TemporaryBlock>> TEMPORARY_BLOCKS=new HashMap<>();
     private record ScheduledCue(int tick,Runnable action){}
+    private record TemporaryBlock(ServerLevel level,BlockPos pos,BlockState original,BlockState placed,int restoreTick){}
     private ElementalAbilityService(){}
 
     public static String use(ServerPlayer player, ElementalAbility ability){
@@ -108,7 +111,7 @@ public final class ElementalAbilityService {
             ring(level,a.element(),hands,0.52,22);
             emit(level,ParticleTypes.ENCHANT,hands,10,0.24,0.24,0.24,0.08);
         }));
-        cues.add(new ScheduledCue(6,()->renderSignature(level,a,origin,look,r,u)));
+        cues.add(new ScheduledCue(6,()->{renderSignature(level,a,origin,look,r,u);placeEnvironmentalStructure(player,level,a,origin,look,right);}));
         cues.add(new ScheduledCue(11,()->{
             Vec3 impact=origin.add(look.scale(Math.min(a.range()*0.72,7)));
             impact(level,a,impact);
@@ -237,12 +240,77 @@ public final class ElementalAbilityService {
         Integer last=LAST_USE_TICK.get(p.getUUID());
         return last!=null&&p.tickCount-last<30;
     }
+    private static void placeEnvironmentalStructure(ServerPlayer player,ServerLevel level,ElementalAbility ability,Vec3 origin,Vec3 look,Vec3 right){
+        int baseY=player.blockPosition().getY();
+        Vec3 center=player.position().add(look.scale(3.2));
+        List<BlockPos> positions=new ArrayList<>();
+        BlockState material=null;
+        int lifetime=60;
+        switch(ability){
+            case STONE_WALL -> {
+                material=Blocks.STONE.defaultBlockState();
+                Vec3 wall=player.position().add(look.scale(3.0));
+                for(int x=-3;x<=3;x++)for(int y=0;y<3;y++)
+                    positions.add(BlockPos.containing(wall.add(right.scale(x*0.9)).add(0,y,0)));
+            }
+            case ROCK_CAGE -> {
+                material=Blocks.COBBLESTONE.defaultBlockState();
+                for(int y=0;y<3;y++)for(int side=-1;side<=1;side++){
+                    positions.add(BlockPos.containing(center.add(right.scale(side*0.9)).add(0,y-0.9,0)));
+                    if(side!=0)positions.add(BlockPos.containing(center.add(look.scale(side*0.9)).add(0,y-0.9,0)));
+                }
+            }
+            case ICE_BIND -> {
+                material=Blocks.PACKED_ICE.defaultBlockState();
+                for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)for(int y=0;y<3;y++)
+                    positions.add(BlockPos.containing(center.add(right.scale(x*0.85)).add(0,y-0.9,0).add(look.scale(z*0.85))));
+            }
+            case SEISMIC_WAVE,EARTHQUAKE -> {
+                material=Blocks.COBBLESTONE.defaultBlockState();
+                lifetime=40;
+                for(int step=1;step<=6;step++){
+                    Vec3 spike=player.position().add(look.scale(step*1.05));
+                    positions.add(BlockPos.containing(spike.add(0,-0.2,0)));
+                    if(ability==ElementalAbility.EARTHQUAKE){
+                        positions.add(BlockPos.containing(spike.add(right.scale(0.65)).add(0,-0.2,0)));
+                        positions.add(BlockPos.containing(spike.subtract(right.scale(0.65)).add(0,-0.2,0)));
+                    }
+                }
+            }
+            default -> { return; }
+        }
+        List<TemporaryBlock> placedBlocks=TEMPORARY_BLOCKS.computeIfAbsent(player.getUUID(),k->new ArrayList<>());
+        for(BlockPos pos:positions){
+            if(!level.isEmptyBlock(pos)||!level.getBlockState(pos.below()).isSolid())continue;
+            BlockState previous=level.getBlockState(pos);
+            if(level.setBlock(pos,material,3))
+                placedBlocks.add(new TemporaryBlock(level,pos,previous,material,player.tickCount+lifetime));
+        }
+    }
+
     public static void tick(ServerPlayer p){
-        List<ScheduledCue> cues=ANIMATIONS.get(p.getUUID());
-        if(cues==null)return;
-        if(!p.isAlive()){ANIMATIONS.remove(p.getUUID());return;}
-        Iterator<ScheduledCue> it=cues.iterator();
-        while(it.hasNext()){ScheduledCue c=it.next();if(p.tickCount>=c.tick()){c.action().run();it.remove();}}
-        if(cues.isEmpty())ANIMATIONS.remove(p.getUUID());
+        UUID id=p.getUUID();
+        List<ScheduledCue> cues=ANIMATIONS.get(id);
+        if(cues!=null){
+            if(!p.isAlive())ANIMATIONS.remove(id);
+            else{
+                Iterator<ScheduledCue> it=cues.iterator();
+                while(it.hasNext()){ScheduledCue cue=it.next();if(p.tickCount>=cue.tick()){cue.action().run();it.remove();}}
+                if(cues.isEmpty())ANIMATIONS.remove(id);
+            }
+        }
+        List<TemporaryBlock> blocks=TEMPORARY_BLOCKS.get(id);
+        if(blocks!=null){
+            Iterator<TemporaryBlock> it=blocks.iterator();
+            while(it.hasNext()){
+                TemporaryBlock block=it.next();
+                if(p.tickCount>=block.restoreTick()){
+                    if(block.level().getBlockState(block.pos()).equals(block.placed()))
+                        block.level().setBlock(block.pos(),block.original(),3);
+                    it.remove();
+                }
+            }
+            if(blocks.isEmpty())TEMPORARY_BLOCKS.remove(id);
+        }
     }
 }
