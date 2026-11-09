@@ -134,7 +134,6 @@ jobs:
                   "time set day",
                   "weather clear",
                   "gamemode creative Dev",
-                  "gamerule doDaylightCycle false",
               ]
               for index, command in enumerate(commands, 10):
                   sock.sendall(packet(index, 2, command))
@@ -183,7 +182,6 @@ jobs:
               python3 "$RUNNER_TEMP/rcon_smoke.py"
               # Switch to third person to include the caster in the recording.
               xdotool mousemove 640 360 click 1
-              xdotool key --clearmodifiers F5
             fi
 
             wait "$CLIENT_PID"
@@ -202,6 +200,18 @@ jobs:
             if ! grep -q "SubmitCustomGeometryEvent is rendering custom meshes" "$RUNNER_TEMP/client.log"; then
               echo "The custom geometry render event was not observed."
               exit 23
+            fi
+            MESH_COUNT=$(grep -c 'MESH_SUBMIT ' "$RUNNER_TEMP/client.log" || true)
+            POSE_COUNT=$(grep -c 'PLAYER_POSE_APPLIED ' "$RUNNER_TEMP/client.log" || true)
+            echo "Unique technique meshes submitted: $MESH_COUNT/24"
+            echo "Unique third-person player poses applied: $POSE_COUNT/24"
+            if [ "$MESH_COUNT" -ne 24 ]; then
+              echo "Not all 24 technique meshes reached the custom geometry collector."
+              exit 24
+            fi
+            if [ "$POSE_COUNT" -ne 24 ]; then
+              echo "Not all 24 player animations reached the third-person render event."
+              exit 25
             fi
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
