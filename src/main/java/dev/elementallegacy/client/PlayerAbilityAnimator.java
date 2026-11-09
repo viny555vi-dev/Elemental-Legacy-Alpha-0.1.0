@@ -3,22 +3,25 @@ package dev.elementallegacy.client;
 import dev.elementallegacy.ElementalLegacy;
 import dev.elementallegacy.ability.ElementalAbility;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.HumanoidArm;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderArmEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
+
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
 /**
- * Client-side skeletal choreography for the real player model.
- * Server packets carry the caster entity id and technique so nearby clients
- * animate the same avatar at the same time.
+ * Applies the animation to render-state inputs BEFORE vanilla builds the player model.
+ * RenderPlayerEvent.Pre runs before AvatarRenderer calls the normal model setup,
+ * so mutating ModelPart rotations in that event gets overwritten. We instead adjust
+ * AvatarRenderState (arm poses, crouch/swim/fall-flying and locomotion values) which
+ * PlayerModel.setupAnim consumes immediately afterwards.
  */
 @EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
 public final class PlayerAbilityAnimator {
@@ -40,297 +43,274 @@ public final class PlayerAbilityAnimator {
         if (minecraft.level == null) return -1.0F;
         ActiveAnimation animation = ACTIVE.get(entityId);
         if (animation == null) return -1.0F;
-        float t = (float) ((minecraft.level.getGameTime() + partialTick - animation.startedAt()) / DURATION_TICKS);
-        if (t >= 1.0F) {
+        float value = (float) ((minecraft.level.getGameTime() + partialTick - animation.startedAt()) / DURATION_TICKS);
+        if (value >= 1.0F) {
             ACTIVE.remove(entityId);
             return -1.0F;
         }
-        return Math.max(0.0F, t);
+        return Math.max(0.0F, value);
     }
 
     @SubscribeEvent
     public static void renderThirdPerson(RenderPlayerEvent.Pre<?> event) {
-        int entityId = event.getRenderState().id;
-        float t = progress(entityId, event.getPartialTick());
+        AvatarRenderState state = event.getRenderState();
+        float t = progress(state.id, event.getPartialTick());
         if (t < 0.0F) return;
-        ActiveAnimation active = ACTIVE.get(entityId);
-        if (active == null) return;
-        animate(event.getRenderer().getModel(), active.abilityId(), t);
+        ActiveAnimation active = ACTIVE.get(state.id);
+        if (active != null) animateRenderState(state, active.abilityId(), t);
     }
 
     @SubscribeEvent
     public static void renderFirstPersonArm(RenderArmEvent event) {
         var avatarState = event.getPlayerRenderState().avatarRenderState;
         if (avatarState == null) return;
-        int entityId = avatarState.id;
-        float t = progress(entityId, avatarState.partialTick);
+        float t = progress(avatarState.id, avatarState.partialTick);
         if (t < 0.0F) return;
-        ActiveAnimation active = ACTIVE.get(entityId);
-        if (active == null) return;
-        animateArm(event.getArmPart(), active.abilityId(), t,
-                event.getArm() == HumanoidArm.RIGHT ? 1.0F : -1.0F);
+        ActiveAnimation active = ACTIVE.get(avatarState.id);
+        if (active != null) {
+            animateArm(event.getArmPart(), active.abilityId(), t,
+                    event.getArm() == HumanoidArm.RIGHT ? 1.0F : -1.0F);
+        }
     }
 
-    private static void animate(PlayerModel model, String abilityId, float t) {
+    private static void animateRenderState(AvatarRenderState state, String abilityId, float t) {
         float charge = 1.0F - smooth(t / 0.38F);
-        float strike = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.62F) / 0.38F));
-        float recovery = smooth((t - 0.62F) / 0.38F);
+        float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
+        float recovery = smooth((t - 0.66F) / 0.34F);
         float pulse = (float) Math.sin(Math.PI * clamp(t));
 
-        ModelPart body = model.body;
-        ModelPart head = model.head;
-        ModelPart rightArm = model.rightArm;
-        ModelPart leftArm = model.leftArm;
-        ModelPart rightLeg = model.rightLeg;
-        ModelPart leftLeg = model.leftLeg;
+        float bodyTurn = 0.0F;
+        float bodyLean = 0.0F;
+        float gait = 0.48F + 0.30F * pulse;
+        boolean crouch = charge > 0.28F;
+        boolean flyingPose = false;
+        boolean swimmingPose = false;
+        HumanoidModel.ArmPose mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+        HumanoidModel.ArmPose offPose = HumanoidModel.ArmPose.EMPTY;
 
-        // Every technique starts with a readable weight shift and finishes with a recovery,
-        // instead of leaving the avatar in its vanilla idle pose.
-        body.xRot += 0.10F * pulse;
-        head.xRot -= 0.05F * pulse;
+        // Distinct body language for each family; all values feed the actual vanilla model setup.
         switch (abilityId) {
             case "flame_projectile" -> {
-                body.yRot += -0.30F * charge + 0.20F * strike;
-                body.xRot += 0.18F * strike;
-                rightArm.xRot += -1.25F * charge + 1.72F * strike - 0.20F * recovery;
-                rightArm.yRot += -0.32F * charge;
-                rightArm.zRot += -0.18F * charge;
-                leftArm.xRot += -0.62F * charge + 0.38F * strike;
-                leftArm.yRot += 0.35F;
-                rightLeg.xRot -= 0.54F * strike;
-                leftLeg.xRot += 0.30F * strike;
+                bodyTurn = -19.0F * charge + 11.0F * release;
+                bodyLean = 8.0F * release;
+                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "flame_burst" -> {
-                body.xRot += 0.32F * strike;
-                body.yRot += 0.12F * pulse;
-                rightArm.xRot += -1.45F * charge + 1.10F * strike;
-                leftArm.xRot += -1.35F * charge + 1.15F * strike;
-                rightArm.zRot -= 0.42F * strike;
-                leftArm.zRot += 0.42F * strike;
-                rightLeg.xRot -= 0.42F * strike;
-                leftLeg.xRot += 0.42F * strike;
+                bodyTurn = 12.0F * pulse;
+                bodyLean = -13.0F * release;
+                gait = 0.95F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "fire_whip" -> {
-                body.yRot += -0.55F * pulse;
-                body.zRot += 0.28F * strike;
-                rightArm.xRot += -2.35F * charge + 1.0F * strike;
-                rightArm.zRot += -0.70F * charge + 0.85F * strike;
-                leftArm.xRot += -0.42F * charge;
-                leftArm.zRot += 0.22F;
-                leftLeg.xRot += 0.34F * strike;
-                rightLeg.xRot -= 0.24F * strike;
+                bodyTurn = -31.0F * pulse;
+                bodyLean = 6.0F * release;
+                gait = 0.78F;
+                mainPose = HumanoidModel.ArmPose.SPEAR;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "focused_explosion" -> {
-                body.xRot += 0.46F * charge - 0.58F * strike;
-                body.yRot += 0.24F * charge;
-                rightArm.xRot += -0.25F - 1.55F * charge + 1.50F * strike;
-                leftArm.xRot += -0.25F - 1.55F * charge + 1.50F * strike;
-                rightArm.zRot -= 0.82F * charge;
-                leftArm.zRot += 0.82F * charge;
-                rightLeg.xRot += 0.55F * charge - 0.32F * strike;
-                leftLeg.xRot += 0.55F * charge - 0.32F * strike;
+                bodyTurn = 16.0F * charge;
+                bodyLean = 17.0F * charge - 19.0F * release;
+                crouch = charge > 0.12F;
+                gait = 0.84F;
+                mainPose = HumanoidModel.ArmPose.TOOT_HORN;
+                offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
-            case "fire_propulsion" -> {
-                body.xRot += 0.68F * pulse;
-                body.yRot += 0.12F * strike;
-                rightArm.xRot += 1.35F * pulse;
-                leftArm.xRot += 1.35F * pulse;
-                rightArm.zRot -= 0.42F;
-                leftArm.zRot += 0.42F;
-                rightLeg.xRot -= 0.95F * strike;
-                leftLeg.xRot += 0.48F * strike;
+            case "fire_propulsion", "air_dash" -> {
+                bodyTurn = 5.0F * pulse;
+                bodyLean = -22.0F * pulse;
+                gait = 1.0F;
+                crouch = false;
+                flyingPose = t > 0.20F && t < 0.88F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "fire_dragon" -> {
-                body.xRot -= 0.24F * charge;
-                body.yRot += 0.25F * pulse;
-                rightArm.xRot += -2.10F * charge + 0.65F * strike;
-                leftArm.xRot += -2.10F * charge + 0.65F * strike;
-                rightArm.zRot -= 0.65F * (1.0F - recovery);
-                leftArm.zRot += 0.65F * (1.0F - recovery);
-                rightLeg.xRot -= 0.25F * strike;
-                leftLeg.xRot -= 0.25F * strike;
+                bodyTurn = 28.0F * pulse;
+                bodyLean = 11.0F * charge - 5.0F * release;
+                gait = 0.80F;
+                mainPose = HumanoidModel.ArmPose.TOOT_HORN;
+                offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "water_projectile" -> {
-                body.yRot += 0.24F * charge - 0.15F * strike;
-                rightArm.xRot += -1.10F * charge + 1.35F * strike;
-                leftArm.xRot += -0.85F * charge + 0.60F * strike;
-                rightArm.yRot -= 0.30F * charge;
-                leftArm.yRot += 0.28F * charge;
-                rightLeg.xRot -= 0.36F * strike;
-                leftLeg.xRot += 0.20F * strike;
+                bodyTurn = 15.0F * charge - 9.0F * release;
+                bodyLean = 7.0F * release;
+                mainPose = HumanoidModel.ArmPose.SPEAR;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "water_whip" -> {
-                body.yRot += 0.48F * pulse;
-                body.zRot -= 0.18F * pulse;
-                rightArm.xRot += -1.70F * charge + 0.95F * strike;
-                leftArm.xRot += -0.55F + 0.30F * strike;
-                rightArm.zRot += 0.95F * pulse;
-                leftArm.zRot += -0.20F * pulse;
-                leftLeg.xRot += 0.34F * strike;
+                bodyTurn = 29.0F * pulse;
+                bodyLean = 5.0F * pulse;
+                gait = 0.72F;
+                swimmingPose = true;
+                mainPose = HumanoidModel.ArmPose.SPEAR;
+                offPose = HumanoidModel.ArmPose.EMPTY;
             }
             case "ice_bind" -> {
-                body.xRot += 0.22F * charge - 0.34F * strike;
-                rightArm.xRot += -2.0F * charge + 1.25F * strike;
-                leftArm.xRot += -2.0F * charge + 1.25F * strike;
-                rightArm.zRot -= 0.20F;
-                leftArm.zRot += 0.20F;
-                rightLeg.xRot += 0.28F * strike;
-                leftLeg.xRot += 0.28F * strike;
+                bodyTurn = -12.0F * charge;
+                bodyLean = 12.0F * charge - 9.0F * release;
+                crouch = charge > 0.10F;
+                gait = 0.72F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "ice_blades" -> {
-                body.yRot += -0.38F * charge + 0.55F * strike;
-                rightArm.xRot += -1.55F * charge + 1.35F * strike;
-                leftArm.xRot += -1.55F * charge + 0.50F * strike;
-                rightArm.zRot -= 0.95F * pulse;
-                leftArm.zRot += 0.95F * pulse;
-                rightLeg.xRot -= 0.28F * strike;
+                bodyTurn = -23.0F * pulse;
+                bodyLean = 8.0F * release;
+                gait = 0.88F;
+                swimmingPose = true;
+                mainPose = HumanoidModel.ArmPose.SPEAR;
+                offPose = HumanoidModel.ArmPose.SPEAR;
             }
             case "water_shield" -> {
-                body.yRot += 0.24F * pulse;
-                rightArm.xRot += -1.0F * pulse - 0.25F;
-                leftArm.xRot += -1.0F * pulse - 0.25F;
-                rightArm.zRot -= 0.82F * pulse;
-                leftArm.zRot += 0.82F * pulse;
-                rightLeg.xRot += 0.14F * pulse;
-                leftLeg.xRot -= 0.14F * pulse;
+                bodyTurn = 8.0F * pulse;
+                bodyLean = -4.0F * pulse;
+                crouch = false;
+                mainPose = HumanoidModel.ArmPose.BLOCK;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "great_wave" -> {
-                body.xRot += 0.30F * strike;
-                body.yRot += 0.18F * pulse;
-                rightArm.xRot += -2.15F * charge + 1.60F * strike;
-                leftArm.xRot += -2.15F * charge + 1.60F * strike;
-                rightArm.zRot -= 0.28F * strike;
-                leftArm.zRot += 0.28F * strike;
-                rightLeg.xRot -= 0.58F * strike;
-                leftLeg.xRot += 0.38F * strike;
+                bodyTurn = -16.0F * charge + 15.0F * release;
+                bodyLean = 18.0F * charge - 16.0F * release;
+                gait = 0.96F;
+                swimmingPose = true;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "rock_throw" -> {
-                body.yRot += -0.48F * charge + 0.30F * strike;
-                body.xRot += 0.20F * charge;
-                rightArm.xRot += -1.55F * charge + 1.55F * strike;
-                leftArm.xRot += -0.45F * charge + 0.25F * strike;
-                rightArm.zRot -= 0.35F * charge;
-                rightLeg.xRot -= 0.42F * strike;
-                leftLeg.xRot += 0.30F * strike;
+                bodyTurn = -26.0F * charge + 16.0F * release;
+                bodyLean = 9.0F * charge - 5.0F * release;
+                gait = 0.74F;
+                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "stone_wall" -> {
-                body.xRot += 0.48F * charge - 0.24F * strike;
-                rightArm.xRot += -0.75F * charge + 1.50F * strike;
-                leftArm.xRot += -0.75F * charge + 1.50F * strike;
-                rightArm.zRot -= 0.25F;
-                leftArm.zRot += 0.25F;
-                rightLeg.xRot += 0.40F * charge - 0.25F * strike;
-                leftLeg.xRot += 0.40F * charge - 0.25F * strike;
+                bodyTurn = 0.0F;
+                bodyLean = 18.0F * charge - 8.0F * release;
+                crouch = charge > 0.15F;
+                gait = 0.68F;
+                mainPose = HumanoidModel.ArmPose.TOOT_HORN;
+                offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "rock_cage" -> {
-                body.yRot += 0.30F * pulse;
-                rightArm.xRot += -0.85F - 0.70F * charge + 0.90F * strike;
-                leftArm.xRot += -0.85F - 0.70F * charge + 0.90F * strike;
-                rightArm.zRot += 0.62F * (1.0F - recovery);
-                leftArm.zRot -= 0.62F * (1.0F - recovery);
-                rightLeg.xRot += 0.25F * strike;
-                leftLeg.xRot += 0.25F * strike;
+                bodyTurn = 12.0F * pulse;
+                bodyLean = -8.0F * pulse;
+                crouch = false;
+                gait = 0.65F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "seismic_wave" -> {
-                body.xRot += 0.38F * charge - 0.68F * strike;
-                rightArm.xRot += -0.60F * charge + 1.80F * strike;
-                leftArm.xRot += -0.60F * charge + 1.80F * strike;
-                rightLeg.xRot += 0.82F * strike;
-                leftLeg.xRot -= 0.12F * strike;
+                bodyTurn = -7.0F * pulse;
+                bodyLean = 21.0F * charge - 20.0F * release;
+                crouch = charge > 0.08F;
+                gait = 0.92F;
+                mainPose = HumanoidModel.ArmPose.TOOT_HORN;
+                offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "stone_armor" -> {
-                body.xRot -= 0.22F * pulse;
-                rightArm.xRot += -1.25F * pulse - 0.25F;
-                leftArm.xRot += -1.25F * pulse - 0.25F;
-                rightArm.zRot -= 0.52F * (1.0F - recovery);
-                leftArm.zRot += 0.52F * (1.0F - recovery);
-                rightLeg.xRot += 0.12F * pulse;
-                leftLeg.xRot -= 0.12F * pulse;
+                bodyTurn = 7.0F * pulse;
+                bodyLean = 6.0F * pulse;
+                crouch = false;
+                gait = 0.52F;
+                mainPose = HumanoidModel.ArmPose.BLOCK;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "earthquake" -> {
-                body.xRot += 0.60F * charge - 0.82F * strike;
-                body.zRot += 0.08F * (float) Math.sin(t * Math.PI * 8.0F) * (1.0F - recovery);
-                rightArm.xRot += -0.80F * charge + 1.90F * strike;
-                leftArm.xRot += -0.80F * charge + 1.90F * strike;
-                rightLeg.xRot += 0.90F * strike;
-                leftLeg.xRot += 0.90F * strike;
+                bodyTurn = 4.0F * (float) Math.sin(t * Math.PI * 4.0F);
+                bodyLean = 24.0F * charge - 27.0F * release;
+                crouch = charge > 0.05F;
+                gait = 1.0F;
+                mainPose = HumanoidModel.ArmPose.TOOT_HORN;
+                offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "air_blast" -> {
-                body.yRot += 0.24F * charge - 0.20F * strike;
-                rightArm.xRot += -1.25F * charge + 1.45F * strike;
-                leftArm.xRot += -0.65F * charge + 0.55F * strike;
-                rightArm.zRot -= 0.30F * charge;
-                rightLeg.xRot -= 0.36F * strike;
-                leftLeg.xRot += 0.24F * strike;
+                bodyTurn = 18.0F * charge - 12.0F * release;
+                bodyLean = 4.0F * release;
+                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "air_push" -> {
-                body.xRot += 0.10F * strike;
-                rightArm.xRot += -1.95F * charge + 1.30F * strike;
-                leftArm.xRot += -1.95F * charge + 1.30F * strike;
-                rightArm.zRot -= 0.75F * (1.0F - recovery);
-                leftArm.zRot += 0.75F * (1.0F - recovery);
-                rightLeg.xRot -= 0.20F * strike;
-                leftLeg.xRot -= 0.20F * strike;
+                bodyTurn = 0.0F;
+                bodyLean = -9.0F * release;
+                gait = 0.82F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "air_shield" -> {
-                body.yRot += 0.38F * pulse;
-                rightArm.xRot += -1.15F - 0.70F * pulse;
-                leftArm.xRot += -1.15F - 0.70F * pulse;
-                rightArm.zRot -= 1.10F * pulse;
-                leftArm.zRot += 1.10F * pulse;
-                rightLeg.xRot += 0.16F * pulse;
-                leftLeg.xRot -= 0.16F * pulse;
+                bodyTurn = 17.0F * pulse;
+                bodyLean = 0.0F;
+                crouch = false;
+                mainPose = HumanoidModel.ArmPose.BLOCK;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "air_jump" -> {
-                body.xRot -= 0.28F * pulse;
-                rightArm.xRot += -2.20F * pulse;
-                leftArm.xRot += -2.20F * pulse;
-                rightLeg.xRot += 0.80F * pulse;
-                leftLeg.xRot += 0.80F * pulse;
-            }
-            case "air_dash" -> {
-                body.xRot += 0.70F * pulse;
-                rightArm.xRot += 1.20F * pulse;
-                leftArm.xRot += 1.20F * pulse;
-                rightArm.zRot -= 0.28F;
-                leftArm.zRot += 0.28F;
-                rightLeg.xRot -= 0.80F * strike;
-                leftLeg.xRot += 0.50F * strike;
+                bodyTurn = 0.0F;
+                bodyLean = -18.0F * pulse;
+                crouch = false;
+                flyingPose = pulse > 0.18F;
+                gait = 0.90F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "cyclone" -> {
-                body.yRot += 0.75F * (float) Math.sin(t * Math.PI * 2.0F);
-                body.zRot += 0.24F * pulse;
-                rightArm.xRot += -2.10F * (1.0F - recovery);
-                leftArm.xRot += -2.10F * (1.0F - recovery);
-                rightArm.zRot -= 0.45F * (float) Math.sin(t * Math.PI * 2.0F);
-                leftArm.zRot += 0.45F * (float) Math.sin(t * Math.PI * 2.0F);
-                rightLeg.xRot -= 0.28F * pulse;
-                leftLeg.xRot += 0.28F * pulse;
+                bodyTurn = 36.0F * (float) Math.sin(t * Math.PI * 2.0F);
+                bodyLean = 9.0F * pulse;
+                crouch = false;
+                gait = 0.88F;
+                mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             default -> {
-                rightArm.xRot += -1.3F * charge + 1.2F * strike;
-                leftArm.xRot += -0.5F * charge;
-                body.xRot += 0.24F * strike;
-                rightLeg.xRot -= 0.28F * strike;
+                bodyTurn = 12.0F * pulse;
+                bodyLean = 8.0F * release;
             }
+        }
+
+        // The player model consumes these render-state values immediately after RenderPlayerEvent.Pre.
+        state.bodyRot += bodyTurn;
+        state.yRot -= bodyTurn * 0.28F;
+        state.xRot += bodyLean;
+        state.isCrouching = state.isCrouching || crouch;
+        state.isFallFlying = state.isFallFlying || flyingPose;
+        if (flyingPose) state.fallFlyingTimeInTicks = Math.max(state.fallFlyingTimeInTicks, t * DURATION_TICKS);
+        if (swimmingPose) {
+            state.isVisuallySwimming = true;
+            state.swimAmount = Math.max(state.swimAmount, pulse * 0.78F);
+        }
+        state.walkAnimationSpeed = Math.max(state.walkAnimationSpeed, gait * pulse);
+        state.walkAnimationPos += t * (7.5F + gait * 4.0F);
+
+        if (state.mainArm == HumanoidArm.LEFT) {
+            state.leftArmPose = mainPose;
+            state.rightArmPose = offPose;
+        } else {
+            state.rightArmPose = mainPose;
+            state.leftArmPose = offPose;
         }
     }
 
     private static void animateArm(ModelPart arm, String abilityId, float t, float side) {
         float charge = 1.0F - smooth(t / 0.38F);
-        float strike = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.62F) / 0.38F));
+        float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
         float pulse = (float) Math.sin(Math.PI * clamp(t));
-        // The first-person hand uses a stronger amplitude because only the forearm is visible.
-        float emphasis = 1.35F;
-        arm.xRot += emphasis * (-0.95F * charge + 1.25F * strike);
-        arm.yRot += side * 0.32F * pulse;
-        arm.zRot += side * 0.50F * pulse;
+
+        // First-person rendering has its own hook after the arm part is prepared,
+        // so these rotations are applied directly at the correct time.
+        arm.xRot -= 1.05F * charge;
+        arm.xRot += 1.45F * release;
+        arm.yRot += side * 0.42F * pulse;
+        arm.zRot += side * 0.58F * pulse;
+
         if (abilityId.equals("fire_whip") || abilityId.equals("water_whip")
                 || abilityId.equals("ice_blades") || abilityId.equals("cyclone")) {
-            arm.zRot += side * 0.65F * (float) Math.sin(t * Math.PI * 2.0F);
+            arm.zRot += side * 0.85F * (float) Math.sin(t * Math.PI * 2.0F);
         }
-        if (abilityId.equals("air_jump") || abilityId.equals("fire_dragon") || abilityId.equals("great_wave")) {
-            arm.xRot -= 0.70F * pulse;
+        if (abilityId.equals("air_jump") || abilityId.equals("fire_dragon")
+                || abilityId.equals("great_wave") || abilityId.equals("stone_wall")) {
+            arm.xRot -= 0.72F * pulse;
         }
     }
 
