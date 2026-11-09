@@ -26,6 +26,25 @@ public final class ElementalCommands {
                                     return builder.buildFuture();
                                 })
                                 .executes(context -> choose(context.getSource(), StringArgumentType.getString(context, "element")))))
+                .then(Commands.literal("bind")
+                        .then(Commands.argument("slot", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    builder.suggest("z"); builder.suggest("x");
+                                    return builder.buildFuture();
+                                })
+                                .then(Commands.argument("ability", StringArgumentType.word())
+                                        .suggests((context, builder) -> {
+                                            ServerPlayer player = context.getSource().getPlayer();
+                                            if (player != null) {
+                                                PlayerProgress progress = ElementalWorldData.get(context.getSource().getServer()).get(player.getUUID());
+                                                Element.byId(progress.elementId()).ifPresent(element ->
+                                                        ElementalAbility.forElement(element).forEach(ability -> builder.suggest(ability.id())));
+                                            }
+                                            return builder.buildFuture();
+                                        })
+                                        .executes(context -> bind(context.getSource(),
+                                                StringArgumentType.getString(context, "slot"),
+                                                StringArgumentType.getString(context, "ability"))))))
                 .then(Commands.literal("status").executes(context -> status(context.getSource())))
                 .then(Commands.literal("skills").executes(context -> skills(context.getSource())))
                 .then(Commands.literal("select")
@@ -59,10 +78,50 @@ public final class ElementalCommands {
     private static int sync(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
-        String response = progress.hasChosenElement()
-                ? "ELEMENTAL_SYNC|chosen|" + progress.elementId()
-                : "ELEMENTAL_SYNC|unchosen";
+        String response;
+        if (progress.hasChosenElement()) {
+            Element element = Element.byId(progress.elementId()).orElse(null);
+            String zAbility = resolveButtonAbility(progress, element, "z");
+            String xAbility = resolveButtonAbility(progress, element, "x");
+            response = "ELEMENTAL_SYNC|chosen|" + progress.elementId() + "|" + zAbility + "|" + xAbility;
+        } else {
+            response = "ELEMENTAL_SYNC|unchosen";
+        }
         source.sendSuccess(() -> Component.literal(response), false);
+        return 1;
+    }
+
+    private static String resolveButtonAbility(PlayerProgress progress, Element element, String slot) {
+        if (element == null) return "";
+        String stored = "z".equals(slot) ? progress.selectedZAbility() : progress.selectedXAbility();
+        if (stored.isBlank() && "z".equals(slot)) stored = progress.selectedAbility();
+        ElementalAbility selected = ElementalAbility.byId(stored).orElse(null);
+        if (selected != null && selected.element() == element) return selected.id();
+        var abilities = ElementalAbility.forElement(element);
+        if (abilities.isEmpty()) return "";
+        int defaultIndex = "z".equals(slot) ? 0 : 1;
+        return abilities.get(Math.min(defaultIndex, abilities.size() - 1)).id();
+    }
+
+    private static int bind(CommandSourceStack source, String requestedSlot, String requestedAbility)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = source.getPlayerOrException();
+        String slot = requestedSlot.toLowerCase(java.util.Locale.ROOT);
+        if (!slot.equals("z") && !slot.equals("x")) {
+            source.sendFailure(Component.literal("Atalho inválido. Use z ou x."));
+            return 0;
+        }
+        PlayerProgress progress = ElementalWorldData.get(source.getServer()).get(player.getUUID());
+        ElementalAbility ability = ElementalAbility.byId(requestedAbility).orElse(null);
+        if (!progress.hasChosenElement() || ability == null
+                || !ability.element().id().equals(progress.elementId())) {
+            source.sendFailure(Component.literal("Técnica inválida ou incompatível com seu elemento."));
+            return 0;
+        }
+        ElementalWorldData.get(source.getServer()).put(player.getUUID(),
+                progress.withButtonAbility(slot, ability.id()));
+        source.sendSuccess(() -> Component.literal("Atalho " + slot.toUpperCase(java.util.Locale.ROOT)
+                + " configurado: " + ability.displayName() + "."), false);
         return 1;
     }
 
