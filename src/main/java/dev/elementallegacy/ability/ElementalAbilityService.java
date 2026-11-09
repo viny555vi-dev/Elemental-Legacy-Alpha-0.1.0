@@ -183,7 +183,7 @@ public final class ElementalAbilityService {
                 }
             }
             case AIR_PUSH -> {
-                for(int radius=1;radius<=5;radius++)ring(l,Element.GALE,radius*0.48,48);
+                for(int radius=1;radius<=5;radius++)ring(l,Element.GALE,o,radius*0.48,48);
             }
             case CYCLONE -> {
                 Vec3 c=o.add(f.scale(3.2));
