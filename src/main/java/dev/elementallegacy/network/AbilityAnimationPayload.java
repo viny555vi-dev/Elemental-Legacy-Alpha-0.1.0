@@ -34,8 +34,9 @@ public record AbilityAnimationPayload(int entityId, String abilityId) implements
 
     public static void broadcast(ServerPlayer caster, ElementalAbility ability) {
         AbilityAnimationPayload payload = new AbilityAnimationPayload(caster.getId(), ability.id());
+        net.minecraft.server.level.ServerLevel level = (net.minecraft.server.level.ServerLevel) caster.level();
         double visibilityRange = 64.0D * 64.0D;
-        for (ServerPlayer viewer : caster.serverLevel().players()) {
+        for (ServerPlayer viewer : level.players()) {
             if (viewer.distanceToSqr(caster) <= visibilityRange) {
                 viewer.connection.send(payload.toVanillaClientbound());
             }
