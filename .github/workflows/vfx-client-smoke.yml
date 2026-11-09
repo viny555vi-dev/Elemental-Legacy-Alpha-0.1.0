@@ -26,10 +26,12 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
           SDL_VIDEODRIVER: x11
         run: |
           xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+            LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
+            test -n "$LVP_ICD"
+            export VK_ICD_FILENAMES="$LVP_ICD"
             glxinfo -B > "$RUNNER_TEMP/glx-info.txt" 2>&1 || true
             vulkaninfo --summary > "$RUNNER_TEMP/vulkan-info.txt" 2>&1
             grep -q "VK_KHR_surface" "$RUNNER_TEMP/vulkan-info.txt"
@@ -76,11 +78,14 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
-          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
           SDL_VIDEODRIVER: x11
         run: |
           set +e
           xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+            LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
+            test -n "$LVP_ICD"
+            export VK_ICD_FILENAMES="$LVP_ICD"
+            export SDL_VIDEODRIVER=x11
             ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 150 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
             timeout 150s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1
