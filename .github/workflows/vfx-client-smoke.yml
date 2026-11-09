@@ -43,9 +43,9 @@ jobs:
       - name: Start dedicated Minecraft server
         shell: bash
         run: |
-          mkdir -p run/server run/client
-          printf 'eula=true\n' > run/server/eula.txt
-          cat > run/server/server.properties <<'EOF'
+          mkdir -p run
+          printf 'eula=true\n' > run/eula.txt
+          cat > run/server.properties <<'EOF'
           online-mode=false
           enforce-secure-profile=false
           server-ip=
@@ -53,9 +53,17 @@ jobs:
           difficulty=peaceful
           gamemode=creative
           spawn-protection=0
-          view-distance=6
+          white-list=false
+          enforce-whitelist=false
+          view-distance=8
           simulation-distance=4
           max-players=4
+          level-name=world
+          level-type=minecraft:flat
+          generate-structures=false
+          enable-rcon=true
+          rcon.password=elemental-vfx-ci
+          rcon.port=25575
           motd=Elemental Legacy VFX Smoke
           EOF
           nohup gradle runServer --no-daemon --max-workers=2 > "$RUNNER_TEMP/server.log" 2>&1 &
@@ -73,7 +81,7 @@ jobs:
           done
           tail -200 "$RUNNER_TEMP/server.log"
           exit 1
-      - name: Run client and record all 24 procedural techniques
+      - name: Run Minecraft client and record all 24 custom 3D techniques
         shell: bash
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
@@ -87,36 +95,83 @@ jobs:
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
             export SDL_VIDEODRIVER=x11
-            export ALSOFT_DRIVERS='null'
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 180 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            export ALSOFT_DRIVERS=null
+            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 210 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
-            timeout 180s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
+            timeout 210s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
 
-            # First-run accessibility dialog blocks the quick-play action. Dismiss it
-            # with a real pointer click, then give quick-play time to join localhost.
-            for i in $(seq 1 45); do
-              if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
-                sleep 8
-                # Accessibility welcome dialog initially focuses Narrator. Tab four
-                # times through Narrator, Music, Accessibility, Language, then Continue.
-                xdotool key --clearmodifiers Tab Tab Tab Tab Return
-                sleep 5
+            JOINED=0
+            for i in $(seq 1 100); do
+              if grep -E "Dev.*(joined the game|logged in with entity id)" "$RUNNER_TEMP/server.log" >/dev/null; then
+                JOINED=1
+                echo "Client successfully joined the dedicated Minecraft 26.3 server."
+                break
+              fi
+              if ! kill -0 "$CLIENT_PID" 2>/dev/null; then
                 break
               fi
               sleep 1
             done
 
-            # Wait up to 35 seconds for the client to join the dedicated server.
-            JOINED=0
-            for i in $(seq 1 60); do
-              if grep -q "logged in with entity id\\|joined the game" "$RUNNER_TEMP/server.log"; then
-                JOINED=1
-                echo "Client successfully joined the test server."
-                break
-              fi
-              sleep 1
-            done
+            if [ "$JOINED" -eq 1 ]; then
+              python3 - <<'PY'
+          import socket, struct, time
+
+          def read_packet(sock):
+              header = sock.recv(4)
+              if len(header) != 4:
+                  raise RuntimeError("RCON connection closed before packet header")
+              length = struct.unpack("<i", header)[0]
+              body = b""
+              while len(body) < length:
+                  chunk = sock.recv(length - len(body))
+                  if not chunk:
+                      raise RuntimeError("RCON connection closed while reading packet")
+                  body += chunk
+              request_id, packet_type = struct.unpack("<ii", body[:8])
+              return request_id, packet_type, body[8:-2].decode("utf-8", "replace")
+
+          def packet(request_id, packet_type, text):
+              payload = struct.pack("<ii", request_id, packet_type) + text.encode("utf-8") + b"\x00\x00"
+              return struct.pack("<i", len(payload)) + payload
+
+          deadline = time.time() + 20
+          sock = None
+          while time.time() < deadline:
+              try:
+                  sock = socket.create_connection(("127.0.0.1", 25575), timeout=3)
+                  break
+              except OSError:
+                  time.sleep(1)
+          if sock is None:
+              raise RuntimeError("Could not connect to the dedicated server RCON")
+          with sock:
+              sock.settimeout(5)
+              sock.sendall(packet(1, 3, "elemental-vfx-ci"))
+              auth_id, _, auth_text = read_packet(sock)
+              if auth_id == -1:
+                  raise RuntimeError("RCON authentication failed")
+              print("RCON authenticated")
+              commands = [
+                  "execute as Dev run elemental choose ember",
+                  "execute as Dev run elemental sync",
+                  "time set day",
+                  "weather clear",
+                  "gamemode creative Dev",
+                  "gamerule doDaylightCycle false",
+              ]
+              for index, command in enumerate(commands, 10):
+                  sock.sendall(packet(index, 2, command))
+                  response_id, _, response = read_packet(sock)
+                  print(f"RCON {command}: {response}")
+              time.sleep(2)
+          PY
+              # Put the player in third person so the recording shows the caster and VFX.
+              xdotool mousemove 640 360 click 1
+              xdotool key --clearmodifiers F5
+            fi
+
             wait "$CLIENT_PID"
             CLIENT_RC=$?
             wait "$CAPTURE_PID"
@@ -126,6 +181,14 @@ jobs:
             if [ "$JOINED" -ne 1 ]; then
               exit 21
             fi
+            if ! grep -q "COMPLETED: all 24 techniques rendered" "$RUNNER_TEMP/client.log"; then
+              echo "The client did not complete the 24-technique visual sequence."
+              exit 22
+            fi
+            if ! grep -q "SubmitCustomGeometryEvent is rendering custom meshes" "$RUNNER_TEMP/client.log"; then
+              echo "The custom geometry render event was not observed."
+              exit 23
+            fi
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
             fi
@@ -134,8 +197,8 @@ jobs:
           echo "xvfb/client wrapper exit: $XVFB_RC"
           test -s "$RUNNER_TEMP/vfx-client-smoke.mp4"
           ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RUNNER_TEMP/vfx-client-smoke.mp4"
-          grep -E 'Minecraft|NeoForge|Elemental Legacy|Connecting|Connected|joined the game|logged in' "$RUNNER_TEMP/client.log" | tail -80 || true
-          grep -E 'logged in with entity id|joined the game' "$RUNNER_TEMP/server.log" | tail -20 || true
+          grep -E 'ELEMENTAL_VFX_SMOKE|Minecraft|NeoForge|Elemental Legacy|Connecting|joined the game|logged in' "$RUNNER_TEMP/client.log" | tail -120 || true
+          grep -E 'Dev.*(logged in with entity id|joined the game)' "$RUNNER_TEMP/server.log" | tail -20 || true
           exit "$XVFB_RC"
       - name: Upload client recording, logs and JAR
         if: always()
