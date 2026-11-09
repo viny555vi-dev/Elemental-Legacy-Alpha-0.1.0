@@ -3,6 +3,7 @@ package dev.elementallegacy.ability;
 import dev.elementallegacy.data.ElementalWorldData;
 import dev.elementallegacy.data.PlayerProgress;
 import dev.elementallegacy.element.Element;
+import dev.elementallegacy.network.AbilityAnimationPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
@@ -49,6 +50,7 @@ public final class ElementalAbilityService {
         player.swing(InteractionHand.MAIN_HAND,new SwingAnimation(SwingAnimationType.WHACK,9),true);
         applyBodyMotion(player,ability,look);
         int hits=applyCombat(level,player,ability,origin,look);
+        AbilityAnimationPayload.broadcast(player, ability);
         scheduleTechnique(player,level,ability,origin,look);
         if(hits>0){
             data.addXp(player.getUUID(),ability.xpReward()*hits);
