@@ -56,7 +56,7 @@ public final class ElementalWorldData extends SavedData {
     public boolean choose(UUID playerId, String elementId) {
         PlayerProgress current = get(playerId);
         if (current.hasChosenElement()) return false;
-        put(playerId, new PlayerProgress(elementId, 1, 0, PlayerProgress.MAX_ENERGY, ""));
+        put(playerId, new PlayerProgress(elementId, 1, 0, PlayerProgress.MAX_ENERGY, "", "", ""));
         return true;
     }
 
