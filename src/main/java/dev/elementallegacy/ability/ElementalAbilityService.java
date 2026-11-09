@@ -105,29 +105,124 @@ public final class ElementalAbilityService {
         if(right.lengthSqr()<0.001)right=new Vec3(1,0,0);
         Vec3 up=right.cross(look).normalize();
         Vec3 hands=origin.add(look.scale(0.38)).add(0,-0.38,0);
-        Vec3 r=right,u=up;
+        final Vec3 rightBasis=right;
+        final Vec3 upBasis=up;
         List<ScheduledCue> cues=new ArrayList<>();
-        // Wind-up: visible energy gathering at the hands/body, followed by the technique's signature.
-        cues.add(new ScheduledCue(0,()->emitElement(level,a.element(),hands,26,0.28,0.3,0.28,0.035)));
+
+        // Five distinct stages: gather, shape, travelling release, impact, and dissipate.
+        cues.add(new ScheduledCue(0,()->{
+            emitElement(level,a.element(),hands,32,0.34,0.36,0.34,0.045);
+            emit(level,ParticleTypes.ENCHANT,hands,8,0.22,0.22,0.22,0.07);
+        }));
         cues.add(new ScheduledCue(3,()->{
-            ring(level,a.element(),hands,0.52,22);
-            emit(level,ParticleTypes.ENCHANT,hands,10,0.24,0.24,0.24,0.08);
+            ring(level,a.element(),hands,0.62,28);
+            emitElement(level,a.element(),origin.add(0,-0.45,0),16,0.42,0.12,0.42,0.025);
         }));
-        cues.add(new ScheduledCue(6,()->{renderSignature(level,a,origin,look,r,u);placeEnvironmentalStructure(player,level,a,origin,look,r);}));
-        cues.add(new ScheduledCue(11,()->{
-            Vec3 impact=origin.add(look.scale(Math.min(a.range()*0.72,7)));
-            impact(level,a,impact);
-            debris(level,impact,a.element(),16);
+        cues.add(new ScheduledCue(6,()->{
+            placeEnvironmentalStructure(player,level,a,origin,look,rightBasis);
+            emitElement(level,a.element(),origin.add(look.scale(0.75)),18,0.26,0.28,0.26,0.035);
         }));
-        cues.add(new ScheduledCue(17,()->{
-            Vec3 end=origin.add(look.scale(Math.min(a.range()*0.72,7)));
-            emitElement(level,a.element(),end,15,0.55,0.38,0.55,0.018);
-            emit(level,ParticleTypes.CLOUD,end,7,0.3,0.2,0.3,0.012);
+        for(int segment=1;segment<=9;segment++){
+            final int step=segment;
+            cues.add(new ScheduledCue(6+step*2,()->renderTechniqueSegment(
+                    level,a,origin,look,rightBasis,upBasis,step)));
+        }
+        cues.add(new ScheduledCue(27,()->{
+            Vec3 impactPoint=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
+            impact(level,a,impactPoint);
+            debris(level,impactPoint,a.element(),24);
+            emitElement(level,a.element(),impactPoint,20,0.72,0.48,0.72,0.055);
         }));
-        int start=player.tickCount;
+        cues.add(new ScheduledCue(34,()->{
+            Vec3 end=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
+            emit(level,ParticleTypes.CLOUD,end,12,0.45,0.28,0.45,0.015);
+            emitElement(level,a.element(),end,10,0.38,0.3,0.38,0.012);
+        }));
+
+        int startTick=player.tickCount;
         List<ScheduledCue> timed=new ArrayList<>();
-        for(ScheduledCue c:cues)timed.add(new ScheduledCue(start+c.tick(),c.action()));
+        for(ScheduledCue cue:cues)timed.add(new ScheduledCue(startTick+cue.tick(),cue.action()));
         ANIMATIONS.put(id,timed);
+    }
+
+    /** Emit one moving slice of a technique per server tick pair, not the whole trail in one frame. */
+    private static void renderTechniqueSegment(ServerLevel level,ElementalAbility ability,Vec3 origin,
+                                               Vec3 forward,Vec3 right,Vec3 up,int segment){
+        double t=segment/9.0D;
+        Vec3 start=origin.add(forward.scale(0.45)).add(0,-0.28,0);
+        switch(ability.id()){
+            case "flame_projectile","water_projectile","air_blast","rock_throw" -> {
+                Vec3 point=start.add(forward.scale(0.35+ t*6.2));
+                emitElement(level,ability.element(),point,22,0.22,0.22,0.22,0.045);
+                emit(level,ParticleTypes.CRIT,point,6,0.15,0.15,0.15,0.035);
+                emitElement(level,ability.element(),point.subtract(forward.scale(0.35)),10,0.14,0.14,0.14,0.018);
+            }
+            case "flame_burst","fire_dragon","great_wave","seismic_wave","earthquake" -> {
+                double distance=0.55+t*5.8;
+                double width=0.22+t*(ability.id().equals("great_wave")||ability.id().equals("earthquake")?2.05:0.78);
+                Vec3 center=start.add(forward.scale(distance)).add(0,-0.42,0);
+                for(int lane=-4;lane<=4;lane++){
+                    Vec3 point=center.add(right.scale(lane*width/4.0D))
+                            .add(0,Math.sin(t*Math.PI*2.0D+lane*0.4D)*0.22,0);
+                    emitElement(level,ability.element(),point,5,0.13,0.16,0.13,0.028);
+                }
+                emit(level,ParticleTypes.POOF,center,8,0.35,0.16,0.35,0.035);
+            }
+            case "fire_whip","water_whip","ice_blades" -> {
+                double angle=-1.38+t*2.76;
+                Vec3 point=start.add(right.scale(Math.sin(angle)*2.65))
+                        .add(forward.scale(0.75+Math.cos(angle)*1.45))
+                        .add(up.scale(Math.sin(t*Math.PI)*0.72));
+                emitElement(level,ability.element(),point,18,0.13,0.13,0.13,0.035);
+                emit(level,ParticleTypes.CRIT,point,5,0.08,0.08,0.08,0.025);
+            }
+            case "focused_explosion","ice_bind","rock_cage" -> {
+                Vec3 center=origin.add(forward.scale(3.0));
+                double angle=t*Math.PI*5.0D;
+                double radius=0.5+0.35*Math.sin(t*Math.PI);
+                Vec3 point=center.add(Math.cos(angle)*radius,-1.0+t*2.1,Math.sin(angle)*radius);
+                emitElement(level,ability.element(),point,16,0.14,0.18,0.14,0.03);
+                if(segment%2==0)ringAt(level,ability.element(),center.add(0,-0.8+t*1.7,0),0.75,28);
+            }
+            case "fire_propulsion","air_dash","air_jump" -> {
+                Vec3 point=origin.subtract(forward.scale(0.25+t*2.35)).add(0,-0.55+t*0.24,0);
+                emitElement(level,ability.element(),point,20,0.3,0.28,0.3,0.045);
+                ring(level,ability.element(),point,0.55+t*0.22,28);
+            }
+            case "water_shield","air_shield","stone_armor" -> {
+                double angle=t*Math.PI*2.0D;
+                Vec3 point=origin.add(right.scale(Math.cos(angle)*1.15))
+                        .add(0,-0.75+t*1.5,0).add(forward.scale(Math.sin(angle)*0.55));
+                emitElement(level,ability.element(),point,16,0.13,0.16,0.13,0.022);
+                ringAt(level,ability.element(),origin.add(0,-0.65+t*1.3,0),1.15,32);
+            }
+            case "stone_wall" -> {
+                Vec3 wall=origin.add(forward.scale(2.8)).add(0,-0.65+t*2.65,0);
+                for(int lane=-3;lane<=3;lane++){
+                    Vec3 point=wall.add(right.scale(lane*0.42));
+                    emit(level,ParticleTypes.POOF,point,7,0.14,0.16,0.14,0.025);
+                    debris(level,point,Element.STONE,4);
+                }
+            }
+            case "air_push" -> {
+                double radius=0.35+t*3.0;
+                ring(level,Element.GALE,origin.add(forward.scale(0.6)),radius,56);
+                Vec3 center=origin.add(forward.scale(0.6));
+                emit(level,ParticleTypes.CLOUD,center,18,radius*0.35,0.3,radius*0.35,0.055);
+            }
+            case "cyclone" -> {
+                double angle=t*Math.PI*5.0D;
+                double radius=0.32+t*1.35;
+                Vec3 center=origin.add(forward.scale(3.0));
+                Vec3 point=center.add(Math.cos(angle)*radius,-1.1+t*3.2,Math.sin(angle)*radius);
+                emit(level,ParticleTypes.CLOUD,point,16,0.22,0.24,0.22,0.045);
+                emitElement(level,Element.GALE,point,8,0.14,0.16,0.14,0.03);
+            }
+            default -> {
+                Vec3 point=start.add(forward.scale(t*5.0));
+                emitElement(level,ability.element(),point,18,0.22,0.22,0.22,0.035);
+            }
+        }
     }
 
     private static void renderSignature(ServerLevel l,ElementalAbility a,Vec3 o,Vec3 f,Vec3 r,Vec3 u){
