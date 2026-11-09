@@ -42,6 +42,8 @@ public final class TechniqueVisualRenderer {
     private static boolean smokeStarted;
     private static int smokeNextTick;
     private static int smokeIndex;
+    private static boolean smokeFinishedLogged;
+    private static boolean submitLogged;
 
     private TechniqueVisualRenderer() {}
 
@@ -63,6 +65,10 @@ public final class TechniqueVisualRenderer {
     public static void submit(SubmitCustomGeometryEvent event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || ACTIVE.isEmpty()) return;
+        if (Boolean.getBoolean("elemental.vfx.smoke") && !submitLogged) {
+            submitLogged = true;
+            System.out.println("[ELEMENTAL_VFX_SMOKE] SubmitCustomGeometryEvent is rendering custom meshes.");
+        }
 
         Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
         long gameTime = event.getLevelRenderState().gameTime;
@@ -111,13 +117,23 @@ public final class TechniqueVisualRenderer {
         if (!smokeStarted) {
             smokeStarted = true;
             smokeIndex = 0;
+            smokeFinishedLogged = false;
+            submitLogged = false;
             smokeNextTick = mc.player.tickCount + 30;
         }
-        if (smokeIndex >= SMOKE_ABILITIES.length || mc.player.tickCount < smokeNextTick) return;
+        if (smokeIndex >= SMOKE_ABILITIES.length) {
+            if (!smokeFinishedLogged) {
+                smokeFinishedLogged = true;
+                System.out.println("[ELEMENTAL_VFX_SMOKE] COMPLETED: all 24 techniques rendered.");
+            }
+            return;
+        }
+        if (mc.player.tickCount < smokeNextTick) return;
 
         String ability = SMOKE_ABILITIES[smokeIndex++];
         start(mc.player.getId(), ability);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
+        System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
         smokeNextTick = mc.player.tickCount + DURATION_TICKS + 5;
     }
 
