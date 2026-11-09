@@ -79,6 +79,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
           SDL_VIDEODRIVER: x11
+          ALSOFT_DRIVERS: null
         run: |
           set +e
           xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
@@ -86,13 +87,45 @@ jobs:
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
             export SDL_VIDEODRIVER=x11
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 150 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            export ALSOFT_DRIVERS=null
+            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 180 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
-            timeout 150s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1
+            timeout 180s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
+            CLIENT_PID=$!
+
+            # First-run accessibility dialog blocks the quick-play action. Dismiss it
+            # with a real pointer click, then give quick-play time to join localhost.
+            for i in $(seq 1 45); do
+              if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
+                sleep 8
+                xdotool mousemove --sync 640 675 click 1
+                sleep 2
+                xdotool key Return || true
+                break
+              fi
+              sleep 1
+            done
+
+            # Wait up to 35 seconds for the client to join the dedicated server.
+            JOINED=0
+            for i in $(seq 1 35); do
+              if grep -q "logged in with entity id\\|joined the game" "$RUNNER_TEMP/server.log"; then
+                JOINED=1
+                echo "Client successfully joined the test server."
+                break
+              fi
+              sleep 1
+            done
+            wait "$CLIENT_PID"
             CLIENT_RC=$?
             wait "$CAPTURE_PID"
+
+            echo "Client process exit: $CLIENT_RC"
+            echo "Server login detected: $JOINED"
+            if [ "$JOINED" -ne 1 ]; then
+              exit 21
+            fi
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
-              echo "Client exited with code $CLIENT_RC"
               exit "$CLIENT_RC"
             fi
           '
@@ -101,8 +134,8 @@ jobs:
           test -s "$RUNNER_TEMP/vfx-client-smoke.mp4"
           ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$RUNNER_TEMP/vfx-client-smoke.mp4"
           grep -E 'Minecraft|NeoForge|Elemental Legacy|Connecting|Connected|joined the game|logged in' "$RUNNER_TEMP/client.log" | tail -80 || true
-          grep -E 'logged in with entity id|joined the game' "$RUNNER_TEMP/server.log" | tail -20
-          grep -q 'logged in with entity id\|joined the game' "$RUNNER_TEMP/server.log"
+          grep -E 'logged in with entity id|joined the game' "$RUNNER_TEMP/server.log" | tail -20 || true
+          exit "$XVFB_RC"
       - name: Upload client recording, logs and JAR
         if: always()
         uses: actions/upload-artifact@v4
