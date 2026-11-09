@@ -14,6 +14,9 @@ public final class AbilityAnimationClientPayloads {
     @SubscribeEvent
     public static void register(RegisterClientPayloadHandlersEvent event) {
         event.register(AbilityAnimationPayload.TYPE, (payload, context) ->
-                context.enqueueWork(() -> PlayerAbilityAnimator.start(payload.entityId(), payload.abilityId())));
+                context.enqueueWork(() -> {
+                    PlayerAbilityAnimator.start(payload.entityId(), payload.abilityId());
+                    TechniqueVisualRenderer.start(payload.entityId(), payload.abilityId());
+                }));
     }
 }

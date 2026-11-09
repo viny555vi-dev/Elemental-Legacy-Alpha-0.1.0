@@ -12,8 +12,14 @@ java.toolchain.languageVersion=JavaLanguageVersion.of(25)
 neoForge {
  version=project.neo_version
  runs {
-  client { client(); systemProperty 'neoforge.enabledGameTestNamespaces',project.mod_id }
-  server { server(); programArgument '--nogui'; systemProperty 'neoforge.enabledGameTestNamespaces',project.mod_id }
+  client {
+   client()
+   if (project.hasProperty('elementalSmoke')) {
+    systemProperty 'elemental.vfx.smoke', 'true'
+    programArguments.addAll '--quickPlayMultiplayer', '127.0.0.1', '--width', '1280', '--height', '720'
+   }
+  }
+  server { server(); programArgument '--nogui' }
   gameTestServer { type="gameTestServer"; systemProperty 'neoforge.enabledGameTestNamespaces',project.mod_id }
   data { clientData(); programArguments.addAll '--mod',project.mod_id,'--all','--output',file('src/generated/resources/').getAbsolutePath(),'--existing',file('src/main/resources/').getAbsolutePath() }
  }
