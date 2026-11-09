@@ -111,7 +111,7 @@ public final class ElementalAbilityService {
             ring(level,a.element(),hands,0.52,22);
             emit(level,ParticleTypes.ENCHANT,hands,10,0.24,0.24,0.24,0.08);
         }));
-        cues.add(new ScheduledCue(6,()->{renderSignature(level,a,origin,look,r,u);placeEnvironmentalStructure(player,level,a,origin,look,right);}));
+        cues.add(new ScheduledCue(6,()->{renderSignature(level,a,origin,look,r,u);placeEnvironmentalStructure(player,level,a,origin,look,r);}));
         cues.add(new ScheduledCue(11,()->{
             Vec3 impact=origin.add(look.scale(Math.min(a.range()*0.72,7)));
             impact(level,a,impact);
