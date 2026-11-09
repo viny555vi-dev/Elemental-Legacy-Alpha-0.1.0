@@ -79,7 +79,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
           SDL_VIDEODRIVER: x11
-          ALSOFT_DRIVERS: null
+          ALSOFT_DRIVERS: 'null'
         run: |
           set +e
           xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
@@ -87,7 +87,7 @@ jobs:
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
             export SDL_VIDEODRIVER=x11
-            export ALSOFT_DRIVERS=null
+            export ALSOFT_DRIVERS='null'
             ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 180 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
             timeout 180s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
@@ -98,9 +98,10 @@ jobs:
             for i in $(seq 1 45); do
               if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
                 sleep 8
-                xdotool mousemove --sync 640 675 click 1
-                sleep 2
-                xdotool key Return || true
+                # Accessibility welcome dialog initially focuses Narrator. Tab four
+                # times through Narrator, Music, Accessibility, Language, then Continue.
+                xdotool key --clearmodifiers Tab Tab Tab Tab Return
+                sleep 5
                 break
               fi
               sleep 1
@@ -108,7 +109,7 @@ jobs:
 
             # Wait up to 35 seconds for the client to join the dedicated server.
             JOINED=0
-            for i in $(seq 1 35); do
+            for i in $(seq 1 60); do
               if grep -q "logged in with entity id\\|joined the game" "$RUNNER_TEMP/server.log"; then
                 JOINED=1
                 echo "Client successfully joined the test server."
