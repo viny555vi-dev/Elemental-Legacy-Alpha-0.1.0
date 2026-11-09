@@ -14,7 +14,9 @@ import net.neoforged.neoforge.client.event.RenderArmEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Applies the animation to render-state inputs BEFORE vanilla builds the player model.
@@ -27,10 +29,15 @@ import java.util.Map;
 public final class PlayerAbilityAnimator {
     private static final int DURATION_TICKS = 38;
     private static final Map<Integer, ActiveAnimation> ACTIVE = new HashMap<>();
+    private static final Set<String> SMOKE_POSES_APPLIED = new HashSet<>();
 
     private record ActiveAnimation(String abilityId, long startedAt) {}
 
     private PlayerAbilityAnimator() {}
+
+    public static void resetSmokeEvidence() {
+        SMOKE_POSES_APPLIED.clear();
+    }
 
     public static void start(int entityId, String abilityId) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -57,7 +64,12 @@ public final class PlayerAbilityAnimator {
         float t = progress(state.id, event.getPartialTick());
         if (t < 0.0F) return;
         ActiveAnimation active = ACTIVE.get(state.id);
-        if (active != null) animateRenderState(state, active.abilityId(), t);
+        if (active != null) {
+            animateRenderState(state, active.abilityId(), t);
+            if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_POSES_APPLIED.add(active.abilityId())) {
+                System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_POSE_APPLIED " + active.abilityId());
+            }
+        }
     }
 
     @SubscribeEvent
