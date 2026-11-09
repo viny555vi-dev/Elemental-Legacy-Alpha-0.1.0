@@ -107,7 +107,7 @@ jobs:
               return request_id, packet_type, body[8:-2].decode("utf-8", "replace")
 
           def packet(request_id, packet_type, text):
-              payload = struct.pack("<ii", request_id, packet_type) + text.encode("utf-8") + b"\\x00\\x00"
+              payload = struct.pack("<ii", request_id, packet_type) + text.encode("utf-8") + b"\x00\x00"
               return struct.pack("<i", len(payload)) + payload
 
           deadline = time.time() + 20
