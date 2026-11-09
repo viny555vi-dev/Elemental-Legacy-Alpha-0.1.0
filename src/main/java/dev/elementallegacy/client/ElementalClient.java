@@ -135,7 +135,8 @@ public final class ElementalClient {
             localElement = "";
             selectedZAbility = "";
             selectedXAbility = "";
-            if (minecraft.player != null && minecraft.level != null && minecraft.gui.screen() == null) {
+            if (!Boolean.getBoolean("elemental.vfx.smoke")
+                    && minecraft.player != null && minecraft.level != null && minecraft.gui.screen() == null) {
                 minecraft.gui.setScreen(new ElementSelectionScreen());
             }
             return;
