@@ -10,6 +10,8 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.SwingAnimationType;
+import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -41,7 +43,7 @@ public final class ElementalAbilityService {
         Vec3 look=player.getLookAngle().normalize();
         Vec3 origin=player.getEyePosition();
         // A real vanilla arm swing is synchronized to observers; the impulse adds a visible body action.
-        player.swing(InteractionHand.MAIN_HAND,true);
+        player.swing(InteractionHand.MAIN_HAND,new SwingAnimation(SwingAnimationType.WHACK,9),true);
         applyBodyMotion(player,ability,look);
         int hits=applyCombat(level,player,ability,origin,look);
         scheduleTechnique(player,level,ability,origin,look);
