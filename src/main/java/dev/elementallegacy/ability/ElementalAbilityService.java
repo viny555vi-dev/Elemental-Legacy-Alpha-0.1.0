@@ -63,7 +63,6 @@ public final class ElementalAbilityService {
             default -> {}
         }
         if(impulse.lengthSqr()>0)p.setDeltaMovement(p.getDeltaMovement().add(impulse));
-        p.hurtMarked=true;
     }
 
     private static int applyCombat(ServerLevel level,ServerPlayer player,ElementalAbility a,Vec3 origin,Vec3 look){
