@@ -389,7 +389,7 @@ public final class TechniqueVisualRenderer {
         for (int i = 0; i < count; i++) {
             double side = (i - (count - 1) / 2.0) * (wide ? 0.48 : 0.42);
             double z = 1.2 + (i % 4) * 1.25 + wave * 1.7;
-            double lift = ease(clamp(wave * 1.45 - (i % 4) * 0.10));
+            double lift = Math.max(0.0, Math.min(1.0, wave * 1.45 - (i % 4) * 0.10));
             if (lift > 0.02) spike(out, pose, point(fx, side, 0.62 * lift, z), wide ? 0.32 : 0.25,
                     (wide ? 1.2 : 0.9) * lift, 0xFF9D8260);
         }

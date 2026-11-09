@@ -118,10 +118,17 @@ public final class ElementalAbilityService {
             ring(level,a.element(),hands,0.62,28);
             emitElement(level,a.element(),origin.add(0,-0.45,0),16,0.42,0.12,0.42,0.025);
         }));
-        cues.add(new ScheduledCue(6,()->{
-            placeEnvironmentalStructure(player,level,a,origin,look,rightBasis);
-            emitElement(level,a.element(),origin.add(look.scale(0.75)),18,0.26,0.28,0.26,0.035);
-        }));
+        // Terrain formations rise in nine timed stages instead of appearing as one instant block.
+        for (int structureStep = 0; structureStep < 9; structureStep++) {
+            final int stage = structureStep;
+            cues.add(new ScheduledCue(6 + stage * 2, () -> {
+                placeEnvironmentalStructure(player, level, a, origin, look, rightBasis, stage);
+                if (stage == 0) {
+                    emitElement(level, a.element(), origin.add(look.scale(0.75)),
+                            18, 0.26, 0.28, 0.26, 0.035);
+                }
+            }));
+        }
         for(int segment=1;segment<=9;segment++){
             final int step=segment;
             cues.add(new ScheduledCue(6+step*2,()->renderTechniqueSegment(
@@ -337,7 +344,9 @@ public final class ElementalAbilityService {
         Integer last=LAST_USE_TICK.get(p.getUUID());
         return last!=null&&p.tickCount-last<30;
     }
-    private static void placeEnvironmentalStructure(ServerPlayer player,ServerLevel level,ElementalAbility ability,Vec3 origin,Vec3 look,Vec3 right){
+    private static void placeEnvironmentalStructure(ServerPlayer player, ServerLevel level,
+                                                    ElementalAbility ability, Vec3 origin,
+                                                    Vec3 look, Vec3 right, int stage) {
         int baseY=player.blockPosition().getY();
         Vec3 center=player.position().add(look.scale(3.2));
         List<BlockPos> positions=new ArrayList<>();
@@ -347,8 +356,11 @@ public final class ElementalAbilityService {
             case STONE_WALL -> {
                 material=Blocks.STONE.defaultBlockState();
                 Vec3 wall=player.position().add(look.scale(3.0));
-                for(int x=-3;x<=3;x++)for(int y=0;y<3;y++)
-                    positions.add(BlockPos.containing(wall.add(right.scale(x*0.9)).add(0,y,0)));
+                for (int y = 0; y < 3; y++) {
+                    for (int x = -3; x <= 3; x++) {
+                        positions.add(BlockPos.containing(wall.add(right.scale(x * 0.9)).add(0, y, 0)));
+                    }
+                }
             }
             case ROCK_CAGE -> {
                 material=Blocks.COBBLESTONE.defaultBlockState();
@@ -376,12 +388,17 @@ public final class ElementalAbilityService {
             }
             default -> { return; }
         }
-        List<TemporaryBlock> placedBlocks=TEMPORARY_BLOCKS.computeIfAbsent(player.getUUID(),k->new ArrayList<>());
-        for(BlockPos pos:positions){
-            if(!level.isEmptyBlock(pos)||!level.getBlockState(pos.below()).isSolid())continue;
-            BlockState previous=level.getBlockState(pos);
-            if(level.setBlock(pos,material,3))
-                placedBlocks.add(new TemporaryBlock(level,pos,previous,material,level.getGameTime()+lifetime));
+        List<TemporaryBlock> placedBlocks = TEMPORARY_BLOCKS.computeIfAbsent(player.getUUID(), k -> new ArrayList<>());
+        int from = positions.size() * stage / 9;
+        int to = positions.size() * (stage + 1) / 9;
+        for (int index = from; index < to; index++) {
+            BlockPos pos = positions.get(index);
+            if (!level.isEmptyBlock(pos) || !level.getBlockState(pos.below()).isSolid()) continue;
+            BlockState previous = level.getBlockState(pos);
+            if (level.setBlock(pos, material, 3)) {
+                placedBlocks.add(new TemporaryBlock(level, pos, previous, material,
+                        level.getGameTime() + lifetime));
+            }
         }
     }
 
