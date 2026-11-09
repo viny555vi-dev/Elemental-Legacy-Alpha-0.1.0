@@ -25,7 +25,7 @@ public final class ElementalAbilityService {
     private static final Map<UUID,Integer> LAST_USE_TICK=new HashMap<>();
     private static final Map<UUID,List<TemporaryBlock>> TEMPORARY_BLOCKS=new HashMap<>();
     private record ScheduledCue(int tick,Runnable action){}
-    private record TemporaryBlock(ServerLevel level,BlockPos pos,BlockState original,BlockState placed,int restoreTick){}
+    private record TemporaryBlock(ServerLevel level,BlockPos pos,BlockState original,BlockState placed,long restoreGameTime){}
     private ElementalAbilityService(){}
 
     public static String use(ServerPlayer player, ElementalAbility ability){
@@ -284,7 +284,7 @@ public final class ElementalAbilityService {
             if(!level.isEmptyBlock(pos)||!level.getBlockState(pos.below()).isSolid())continue;
             BlockState previous=level.getBlockState(pos);
             if(level.setBlock(pos,material,3))
-                placedBlocks.add(new TemporaryBlock(level,pos,previous,material,player.tickCount+lifetime));
+                placedBlocks.add(new TemporaryBlock(level,pos,previous,material,level.getGameTime()+lifetime));
         }
     }
 
@@ -299,18 +299,19 @@ public final class ElementalAbilityService {
                 if(cues.isEmpty())ANIMATIONS.remove(id);
             }
         }
-        List<TemporaryBlock> blocks=TEMPORARY_BLOCKS.get(id);
-        if(blocks!=null){
+        Iterator<Map.Entry<UUID,List<TemporaryBlock>>> owners=TEMPORARY_BLOCKS.entrySet().iterator();
+        while(owners.hasNext()){
+            List<TemporaryBlock> blocks=owners.next().getValue();
             Iterator<TemporaryBlock> it=blocks.iterator();
             while(it.hasNext()){
                 TemporaryBlock block=it.next();
-                if(p.tickCount>=block.restoreTick()){
+                if(block.level().getGameTime()>=block.restoreGameTime()){
                     if(block.level().getBlockState(block.pos()).equals(block.placed()))
                         block.level().setBlock(block.pos(),block.original(),3);
                     it.remove();
                 }
             }
-            if(blocks.isEmpty())TEMPORARY_BLOCKS.remove(id);
+            if(blocks.isEmpty())owners.remove();
         }
     }
 }
