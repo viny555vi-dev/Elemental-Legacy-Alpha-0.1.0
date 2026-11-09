@@ -83,7 +83,6 @@ public final class ElementalAbilityService {
             if(!target.hurtServer(level,player.damageSources().playerAttack(player),damage))continue;
             hits++;
             Vec3 push=look.scale(a.element()==Element.GALE?1.25:0.62);
-            if(a.element()==Element.GALE||a==ElementElementDummy.NEVER){} 
             if(a==ElementalAbility.CYCLONE||a==ElementalAbility.AIR_JUMP)push=push.add(0,0.72,0);
             if(radial)push=target.position().subtract(player.position()).normalize().scale(0.9).add(0,0.35,0);
             target.push(push.x,push.y,push.z);
@@ -245,5 +244,4 @@ public final class ElementalAbilityService {
         while(it.hasNext()){ScheduledCue c=it.next();if(p.tickCount>=c.tick()){c.action().run();it.remove();}}
         if(cues.isEmpty())ANIMATIONS.remove(p.getUUID());
     }
-    private static final class ElementElementDummy { private static final Element NEVER=null; }
 }
