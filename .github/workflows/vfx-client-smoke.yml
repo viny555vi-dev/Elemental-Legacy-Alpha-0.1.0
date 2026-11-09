@@ -21,7 +21,23 @@ jobs:
       - name: Install virtual display and software rendering
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xdotool libgl1-mesa-dri libglx-mesa0 mesa-utils ffmpeg
+          sudo apt-get install -y xvfb xdotool libgl1-mesa-dri libglx-mesa0 mesa-utils libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg
+      - name: Verify virtual graphics backends
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_GL_VERSION_OVERRIDE: '4.5'
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          SDL_VIDEODRIVER: x11
+          VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+          SDL_VIDEODRIVER: x11
+        run: |
+          xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+            glxinfo -B > "$RUNNER_TEMP/glx-info.txt" 2>&1 || true
+            vulkaninfo --summary > "$RUNNER_TEMP/vulkan-info.txt" 2>&1
+            grep -q "VK_KHR_surface" "$RUNNER_TEMP/vulkan-info.txt"
+            grep -q "VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
+            grep -E "deviceName|driverName|VK_KHR_surface|VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
+          '
       - name: Build mod
         run: gradle clean build --no-daemon --refresh-dependencies --stacktrace
       - name: Start dedicated Minecraft server
@@ -65,9 +81,9 @@ jobs:
         run: |
           set +e
           xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 78 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 150 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
-            timeout 78s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1
+            timeout 150s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1
             CLIENT_RC=$?
             wait "$CAPTURE_PID"
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
@@ -93,4 +109,6 @@ jobs:
             ${{ runner.temp }}/client.log
             ${{ runner.temp }}/server.log
             ${{ runner.temp }}/ffmpeg.log
+            ${{ runner.temp }}/glx-info.txt
+            ${{ runner.temp }}/vulkan-info.txt
           if-no-files-found: warn
