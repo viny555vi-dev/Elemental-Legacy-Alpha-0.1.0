@@ -78,13 +78,13 @@ public final class AbilityWheelScreen extends Screen {
         if (!abilities.isEmpty()) {
             ElementalClient.bindShortcut(shortcutName, abilities.get(selectedIndex).id());
         }
-        Minecraft.getInstance().setScreen(null);
+        Minecraft.getInstance().gui.setScreen(null);
     }
 
     private void closeWithoutSaving() {
         if (finished) return;
         finished = true;
-        Minecraft.getInstance().setScreen(null);
+        Minecraft.getInstance().gui.setScreen(null);
     }
 
     @Override
