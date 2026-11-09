@@ -150,10 +150,21 @@ jobs:
             export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
 
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 210 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 165 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
-            timeout 210s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
+            timeout 165s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
+
+            # Dismiss the first-run accessibility welcome screen before quick-play connects.
+            for i in $(seq 1 60); do
+              if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
+                sleep 8
+                xdotool key --clearmodifiers Tab Tab Tab Tab Return
+                sleep 5
+                break
+              fi
+              sleep 1
+            done
 
             JOINED=0
             for i in $(seq 1 100); do
