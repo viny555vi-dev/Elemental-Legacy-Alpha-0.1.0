@@ -3,6 +3,7 @@ package dev.elementallegacy.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.elementallegacy.ElementalLegacy;
+import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -16,9 +17,11 @@ import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Procedural, mod-owned 3D ability geometry for Minecraft 26.3.
@@ -31,6 +34,7 @@ import java.util.Map;
 public final class TechniqueVisualRenderer {
     private static final int DURATION_TICKS = 48;
     private static final Map<Integer, ActiveEffect> ACTIVE = new HashMap<>();
+    private static final Set<String> SMOKE_MESHES_SUBMITTED = new HashSet<>();
     private static final String[] SMOKE_ABILITIES = {
             "flame_projectile", "flame_burst", "fire_whip", "focused_explosion", "fire_propulsion", "fire_dragon",
             "water_projectile", "water_whip", "ice_bind", "ice_blades", "water_shield", "great_wave",
@@ -93,6 +97,9 @@ public final class TechniqueVisualRenderer {
             );
             ActiveEffect current = effect;
             float time = clamp(progress);
+            if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_MESHES_SUBMITTED.add(effect.abilityId())) {
+                System.out.println("[ELEMENTAL_VFX_SMOKE] MESH_SUBMIT " + effect.abilityId());
+            }
             event.getSubmitNodeCollector().submitCustomGeometry(
                     poseStack,
                     RenderTypes.debugQuads(),
@@ -116,6 +123,9 @@ public final class TechniqueVisualRenderer {
         }
         if (!smokeStarted) {
             smokeStarted = true;
+            mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
+            SMOKE_MESHES_SUBMITTED.clear();
+            PlayerAbilityAnimator.resetSmokeEvidence();
             smokeIndex = 0;
             smokeFinishedLogged = false;
             submitLogged = false;
