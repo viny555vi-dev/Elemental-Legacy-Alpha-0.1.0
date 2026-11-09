@@ -1,0 +1,87 @@
+name: Minecraft Visual Test Lab
+
+on:
+  push:
+    branches:
+      - visual-test-lab
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  client-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.1'
+
+      - name: Install virtual display and capture tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils ffmpeg libgl1-mesa-dri libglx-mesa0 libxrandr2 libxinerama1 libxcursor1 libxi6
+
+      - name: Compile the mod
+        run: gradle clean build --no-daemon --refresh-dependencies --stacktrace
+
+      - name: Launch the actual Minecraft 26.3 NeoForge client
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p test-evidence
+          Xvfb :99 -screen 0 1280x720x24 -nolisten tcp >test-evidence/xvfb.log 2>&1 &
+          XVFB_PID=$!
+          export DISPLAY=:99
+          export LIBGL_ALWAYS_SOFTWARE=1
+          for i in $(seq 1 30); do
+            if xdpyinfo -display :99 >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          if ! xdpyinfo -display :99 >/dev/null 2>&1; then
+            echo "Virtual display failed to start."
+            exit 1
+          fi
+
+          ffmpeg -hide_banner -loglevel error -y -f x11grab -framerate 20 -video_size 1280x720 -i :99.0 -t 210 test-evidence/minecraft-client.mp4 >test-evidence/ffmpeg.log 2>&1 &
+          CAPTURE_PID=$!
+
+          set +e
+          timeout --signal=TERM --kill-after=15s 210s gradle runClient --no-daemon --stacktrace 2>&1 | tee test-evidence/client-launch.log
+          RUN_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          kill "$CAPTURE_PID" >/dev/null 2>&1 || true
+          kill "$XVFB_PID" >/dev/null 2>&1 || true
+
+          echo "runClient exit status: $RUN_STATUS"
+          if [ "$RUN_STATUS" -ne 0 ] && [ "$RUN_STATUS" -ne 124 ]; then
+            exit "$RUN_STATUS"
+          fi
+
+          test -s test-evidence/minecraft-client.mp4
+          test -f runs/client/logs/latest.log
+          grep -qi "elemental_legacy" runs/client/logs/latest.log
+
+      - name: Upload visual evidence and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-visual-test-evidence
+          path: |
+            test-evidence/**
+            runs/client/logs/**
+            runs/client/crash-reports/**
+            build/libs/*.jar
+          if-no-files-found: warn
