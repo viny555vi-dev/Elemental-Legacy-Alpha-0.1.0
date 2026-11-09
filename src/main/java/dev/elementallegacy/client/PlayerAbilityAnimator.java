@@ -60,8 +60,10 @@ public final class PlayerAbilityAnimator {
 
     @SubscribeEvent
     public static void renderFirstPersonArm(RenderArmEvent event) {
-        int entityId = event.getPlayerRenderState().id;
-        float t = progress(entityId, event.getPlayerRenderState().partialTick);
+        var avatarState = event.getPlayerRenderState().avatarRenderState;
+        if (avatarState == null) return;
+        int entityId = avatarState.id;
+        float t = progress(entityId, avatarState.partialTick);
         if (t < 0.0F) return;
         ActiveAnimation active = ACTIVE.get(entityId);
         if (active == null) return;
