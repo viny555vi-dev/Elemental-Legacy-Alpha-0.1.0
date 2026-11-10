@@ -7,6 +7,7 @@ import net.minecraft.world.entity.Avatar;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.renderstate.AvatarRenderStateModifier;
 import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEvent;
 
 /**
@@ -23,7 +24,7 @@ public final class PlayerAbilityRenderStateModifiers {
 
     @SubscribeEvent
     public static void register(RegisterRenderStateModifiersEvent event) {
-        event.registerAvatarEntityModifier(new RegisterRenderStateModifiersEvent.AvatarRenderStateModifier() {
+        event.registerAvatarEntityModifier(new AvatarRenderStateModifier() {
             @Override
             public <T extends Avatar & ClientAvatarEntity> void accept(T avatar, AvatarRenderState state) {
                 PlayerAbilityAnimator.applyRenderState(state);
