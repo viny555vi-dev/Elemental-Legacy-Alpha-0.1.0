@@ -11,7 +11,6 @@ import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderArmEvent;
-import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +29,7 @@ public final class PlayerAbilityAnimator {
     private static final int DURATION_TICKS = 38;
     private static final Map<Integer, ActiveAnimation> ACTIVE = new HashMap<>();
     private static final Set<String> SMOKE_POSES_APPLIED = new HashSet<>();
+    private static final Set<String> SMOKE_MODEL_POSES_VERIFIED = new HashSet<>();
 
     private record ActiveAnimation(String abilityId, long startedAt) {}
 
@@ -37,6 +37,7 @@ public final class PlayerAbilityAnimator {
 
     public static void resetSmokeEvidence() {
         SMOKE_POSES_APPLIED.clear();
+        SMOKE_MODEL_POSES_VERIFIED.clear();
     }
 
     public static void start(int entityId, String abilityId) {
@@ -58,17 +59,40 @@ public final class PlayerAbilityAnimator {
         return Math.max(0.0F, value);
     }
 
-    @SubscribeEvent
-    public static void renderThirdPerson(RenderPlayerEvent.Pre<?> event) {
-        AvatarRenderState state = event.getRenderState();
-        float t = progress(state.id, event.getPartialTick());
+    /** Applies animation values during NeoForge's render-state extraction phase. */
+    public static void applyRenderState(AvatarRenderState state) {
+        float t = progress(state.id, state.partialTick);
         if (t < 0.0F) return;
         ActiveAnimation active = ACTIVE.get(state.id);
-        if (active != null) {
-            animateRenderState(state, active.abilityId(), t);
-            if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_POSES_APPLIED.add(active.abilityId())) {
-                System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_POSE_APPLIED " + active.abilityId());
-            }
+        if (active == null) return;
+        animateRenderState(state, active.abilityId(), t);
+        if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_POSES_APPLIED.add(active.abilityId())) {
+            System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_STATE_MODIFIED " + active.abilityId()
+                    + " bodyRot=" + state.bodyRot
+                    + " crouch=" + state.isCrouching
+                    + " rightArm=" + state.rightArmPose
+                    + " leftArm=" + state.leftArmPose);
+        }
+    }
+
+    @SubscribeEvent
+    public static void verifyRenderedPose(net.neoforged.neoforge.client.event.RenderPlayerEvent.Post<?> event) {
+        if (!Boolean.getBoolean("elemental.vfx.smoke")) return;
+        AvatarRenderState state = event.getRenderState();
+        ActiveAnimation active = ACTIVE.get(state.id);
+        if (active == null || SMOKE_MODEL_POSES_VERIFIED.contains(active.abilityId())) return;
+        var model = event.getRenderer().getModel();
+        float rightArmX = model.rightArm.xRot;
+        float leftArmX = model.leftArm.xRot;
+        float bodyX = model.body.xRot;
+        float rightArmZ = model.rightArm.zRot;
+        float leftArmZ = model.leftArm.zRot;
+        boolean visiblyPosed = Math.abs(rightArmX) > 0.30F || Math.abs(leftArmX) > 0.30F
+                || Math.abs(bodyX) > 0.20F || Math.abs(rightArmZ) > 0.20F || Math.abs(leftArmZ) > 0.20F;
+        if (visiblyPosed && SMOKE_MODEL_POSES_VERIFIED.add(active.abilityId())) {
+            System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_MODEL_POSED " + active.abilityId()
+                    + " rightArmX=" + rightArmX + " leftArmX=" + leftArmX
+                    + " bodyX=" + bodyX + " rightArmZ=" + rightArmZ + " leftArmZ=" + leftArmZ);
         }
     }
 
