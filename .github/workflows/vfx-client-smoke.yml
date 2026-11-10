@@ -201,16 +201,16 @@ jobs:
               echo "The custom geometry render event was not observed."
               exit 23
             fi
-            MESH_COUNT=$(grep -c 'MESH_SUBMIT ' "$RUNNER_TEMP/client.log" || true)
-            POSE_COUNT=$(grep -c 'PLAYER_POSE_APPLIED ' "$RUNNER_TEMP/client.log" || true)
+            MESH_COUNT=$(grep -c "MESH_SUBMIT " "$RUNNER_TEMP/client.log" || true)
+            POSE_COUNT=$(grep -c "PLAYER_MODEL_POSED " "$RUNNER_TEMP/client.log" || true)
             echo "Unique technique meshes submitted: $MESH_COUNT/24"
-            echo "Unique third-person player poses applied: $POSE_COUNT/24"
+            echo "Unique visibly posed player models verified: $POSE_COUNT/24"
             if [ "$MESH_COUNT" -ne 24 ]; then
               echo "Not all 24 technique meshes reached the custom geometry collector."
               exit 24
             fi
             if [ "$POSE_COUNT" -ne 24 ]; then
-              echo "Not all 24 player animations reached the third-person render event."
+              echo "Not all 24 player model poses were visibly changed after model setup."
               exit 25
             fi
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
