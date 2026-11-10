@@ -158,7 +158,7 @@ jobs:
               raise SystemExit("Missing video capture start timestamp.")
           capture_start_ms = int(start_path.read_text().strip())
           log_text = log_path.read_text(errors="replace")
-          pattern = re.compile(r"PLAYER_MODEL_POSED ([a-z0-9_]+).*?atMs=(\\d+)")
+          pattern = re.compile(r"PLAYER_MODEL_POSED ([a-z0-9_]+).*?atMs=(\d+)")
           entries = []
           seen = set()
           for line in log_text.splitlines():
@@ -172,7 +172,7 @@ jobs:
           if len(entries) != 24:
               raise SystemExit(f"Expected 24 timestamped rendered poses; found {len(entries)}.")
 
-          manifest = ["index\\tabillity\\tvideo_time_seconds\\tpose_timestamp_ms"]
+          manifest = ["index\\tability\\tvideo_time_seconds\\tpose_timestamp_ms"]
           for index, (ability, pose_ms) in enumerate(entries, 1):
               video_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
               if video_time < 0:
