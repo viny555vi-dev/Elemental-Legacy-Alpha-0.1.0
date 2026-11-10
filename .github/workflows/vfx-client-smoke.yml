@@ -172,7 +172,7 @@ jobs:
           if len(entries) != 24:
               raise SystemExit(f"Expected 24 timestamped rendered poses; found {len(entries)}.")
 
-          manifest = ["index\\tability\\tvideo_time_seconds\\tpose_timestamp_ms"]
+          manifest = ["index\tability\tvideo_time_seconds\tpose_timestamp_ms"]
           for index, (ability, pose_ms) in enumerate(entries, 1):
               video_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
               if video_time < 0:
@@ -185,8 +185,8 @@ jobs:
               ], check=True)
               if not image_path.exists() or image_path.stat().st_size < 1024:
                   raise SystemExit(f"Screenshot was not created for {ability}.")
-              manifest.append(f"{index:02d}\\t{ability}\\t{video_time:.3f}\\t{pose_ms}")
-          (output_dir / "manifest.tsv").write_text("\\n".join(manifest) + "\\n")
+              manifest.append(f"{index:02d}\t{ability}\t{video_time:.3f}\t{pose_ms}")
+          (output_dir / "manifest.tsv").write_text("\n".join(manifest) + "\n")
           print(f"Timestamped visual evidence: {len(entries)}/24 screenshots generated.")
           PY
 
