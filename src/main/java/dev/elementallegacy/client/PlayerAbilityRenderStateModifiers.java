@@ -16,8 +16,7 @@ import net.neoforged.neoforge.client.renderstate.RegisterRenderStateModifiersEve
  */
 @EventBusSubscriber(
         modid = ElementalLegacy.MOD_ID,
-        value = Dist.CLIENT,
-        bus = EventBusSubscriber.Bus.MOD
+        value = Dist.CLIENT
 )
 public final class PlayerAbilityRenderStateModifiers {
     private PlayerAbilityRenderStateModifiers() {}
