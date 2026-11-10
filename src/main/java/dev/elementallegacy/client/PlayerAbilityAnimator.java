@@ -22,6 +22,7 @@ import java.util.Set;
  * RenderPlayerEvent.Pre runs before AvatarRenderer calls the normal model setup,
  * so mutating ModelPart rotations in that event gets overwritten. We instead adjust
  * AvatarRenderState (arm poses, crouch/swim/fall-flying and locomotion values) which
+ * is modified by NeoForge's RegisterRenderStateModifiersEvent before model submission.
  * PlayerModel.setupAnim consumes immediately afterwards.
  */
 @EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
