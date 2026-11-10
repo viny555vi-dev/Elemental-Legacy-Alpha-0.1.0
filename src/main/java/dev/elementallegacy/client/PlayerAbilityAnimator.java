@@ -92,6 +92,7 @@ public final class PlayerAbilityAnimator {
                 || Math.abs(bodyX) > 0.20F || Math.abs(rightArmZ) > 0.20F || Math.abs(leftArmZ) > 0.20F;
         if (visiblyPosed && SMOKE_MODEL_POSES_VERIFIED.add(active.abilityId())) {
             System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_MODEL_POSED " + active.abilityId()
+                    + " atMs=" + System.currentTimeMillis()
                     + " rightArmX=" + rightArmX + " leftArmX=" + leftArmX
                     + " bodyX=" + bodyX + " rightArmZ=" + rightArmZ + " leftArmZ=" + leftArmZ);
         }
