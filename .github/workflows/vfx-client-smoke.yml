@@ -172,22 +172,39 @@ jobs:
           if len(entries) != 24:
               raise SystemExit(f"Expected 24 timestamped rendered poses; found {len(entries)}.")
 
-          manifest = ["index\tability\tvideo_time_seconds\tpose_timestamp_ms"]
+          manifest = ["index\tability\tsample_index\toffset_seconds\tvideo_time_seconds\tpose_timestamp_ms"]
+          sample_offsets = [0.20, 0.55, 0.90, 1.25, 1.60]
+          screenshot_count = 0
           for index, (ability, pose_ms) in enumerate(entries, 1):
-              video_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
-              if video_time < 0:
-                  raise SystemExit(f"Invalid video offset for {ability}: {video_time:.3f}s")
-              image_path = output_dir / f"{index:02d}_{ability}.png"
-              subprocess.run([
-                  "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-                  "-ss", f"{video_time:.3f}", "-i", str(video_path),
-                  "-frames:v", "1", str(image_path)
-              ], check=True)
-              if not image_path.exists() or image_path.stat().st_size < 1024:
-                  raise SystemExit(f"Screenshot was not created for {ability}.")
-              manifest.append(f"{index:02d}\t{ability}\t{video_time:.3f}\t{pose_ms}")
+              base_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
+              if base_time < 0:
+                  raise SystemExit(f"Invalid video offset for {ability}: {base_time:.3f}s")
+              for sample_index, offset in enumerate(sample_offsets, 1):
+                  video_time = base_time + offset
+                  image_path = output_dir / f"{index:02d}_{ability}_{sample_index:02d}.png"
+                  subprocess.run([
+                      "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                      "-ss", f"{video_time:.3f}", "-i", str(video_path),
+                      "-frames:v", "1", str(image_path)
+                  ], check=True)
+                  if not image_path.exists() or image_path.stat().st_size < 1024:
+                      raise SystemExit(f"Screenshot {sample_index}/5 was not created for {ability}.")
+                  screenshot_count += 1
+                  manifest.append(
+                      f"{index:02d}\t{ability}\t{sample_index}\t{offset:.2f}\t{video_time:.3f}\t{pose_ms}"
+                  )
           (output_dir / "manifest.tsv").write_text("\n".join(manifest) + "\n")
-          print(f"Timestamped visual evidence: {len(entries)}/24 screenshots generated.")
+          contact_sheet = output_dir / "timeline-contact.jpg"
+          subprocess.run([
+              "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+              "-framerate", "1", "-pattern_type", "glob",
+              "-i", str(output_dir / "*.png"),
+              "-vf", "scale=320:180,tile=5x24",
+              "-frames:v", "1", str(contact_sheet)
+          ], check=True)
+          if screenshot_count != 120 or not contact_sheet.exists() or contact_sheet.stat().st_size < 1024:
+              raise SystemExit(f"Incomplete animation timeline evidence: {screenshot_count}/120.")
+          print(f"Timestamped animation timelines: {screenshot_count}/120 screenshots generated; 24x5 contact sheet ready.")
           PY
 
           set +e
