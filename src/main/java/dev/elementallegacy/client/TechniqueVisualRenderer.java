@@ -155,7 +155,7 @@ public final class TechniqueVisualRenderer {
             case "flame_burst" -> coneBurst(fx, t, pose, out, 0xFFFF5A20, 0xFFFFD16A);
             case "fire_whip" -> whip(fx, t, pose, out, 0xFFFF5A22, 0xFFFFD36B, 2.9);
             case "focused_explosion" -> explosion(fx, t, pose, out, 0xFFFF4B1E, 0xFFFFD06A);
-            case "fire_propulsion" -> propulsion(fx, t, pose, out, 0xFFFF501F, 0xFFFFC94A);
+            case "fire_propulsion" -> firePropulsion(fx, t, pose, out, 0xFFFF501F, 0xFFFFC94A);
             case "fire_dragon" -> dragon(fx, t, pose, out);
 
             // TIDE — a continuous moving water sheet, ribbons and ice geometry.
@@ -179,7 +179,7 @@ public final class TechniqueVisualRenderer {
             case "air_push" -> airPush(fx, t, pose, out);
             case "air_shield" -> airShield(fx, t, pose, out);
             case "air_jump" -> airJump(fx, t, pose, out);
-            case "air_dash" -> propulsion(fx, t, pose, out, 0xFF52CDB8, 0xFFE2FFFF);
+            case "air_dash" -> airDash(fx, t, pose, out, 0xFF52CDB8, 0xFFE2FFFF);
             case "cyclone" -> cyclone(fx, t, pose, out);
             default -> projectile(fx, t, pose, out, 0xFFFFFFFF, 0xFFB8E8FF, 0.3);
         }
@@ -257,20 +257,72 @@ public final class TechniqueVisualRenderer {
         ringAt(out, pose, fx, 0.1 + release * 0.85, radius * 0.9, outer, 48, false, t);
     }
 
-    private static void propulsion(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
-                                   int outer, int inner) {
-        float active = ease(clamp((t - 0.08F) / 0.22F)) * (1.0F - ease(clamp((t - 0.72F) / 0.28F)));
-        for (int strand = 0; strand < 4; strand++) {
-            List<Vec3> path = new ArrayList<>();
-            for (int i = 0; i <= 14; i++) {
-                double u = i / 14.0;
-                double angle = u * Math.PI * 3.2 + t * 9.0 + strand * Math.PI / 2.0;
-                double r = 0.34 + 0.16 * Math.sin(u * Math.PI);
-                path.add(point(fx, Math.cos(angle) * r, Math.sin(angle) * r, -u * 2.25 * active));
+    private static void firePropulsion(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
+                                       int outer, int inner) {
+        float thrust = ease(clamp((t - 0.04F) / 0.18F))
+                * (1.0F - ease(clamp((t - 0.76F) / 0.24F)));
+        for (int jet = 0; jet < 5; jet++) {
+            double phase = jet * Math.PI * 2.0 / 5.0;
+            List<Vec3> plume = new ArrayList<>();
+            for (int i = 0; i <= 22; i++) {
+                double u = i / 22.0;
+                double radius = 0.16 + u * 0.52;
+                double flicker = Math.sin(u * Math.PI * 4.0 + t * 13.0 + phase) * 0.09;
+                double side = Math.cos(phase) * radius + flicker;
+                double up = -0.52 + Math.sin(phase) * radius * 0.65 + flicker * 0.55;
+                double back = -u * 4.2 * thrust;
+                plume.add(point(fx, side, up, back));
             }
-            ribbon(out, pose, path, 0.085, outer);
+            ribbon(out, pose, plume, jet == 0 ? 0.17 : 0.105, outer);
+            if (jet % 2 == 0) ribbon(out, pose, plume, 0.035, inner);
         }
-        ringAt(out, pose, fx, 0.2, 0.45 + active * 0.7, inner, 40, false, t);
+
+        for (int sideSign : new int[]{-1, 1}) {
+            List<Vec3> footJet = new ArrayList<>();
+            for (int i = 0; i <= 16; i++) {
+                double u = i / 16.0;
+                footJet.add(point(fx,
+                        sideSign * (0.24 + u * 0.16),
+                        -0.72 + Math.sin(u * Math.PI * 2.0 + t * 15.0) * 0.08,
+                        0.05 - u * 3.7 * thrust));
+            }
+            ribbon(out, pose, footJet, 0.13, outer);
+            ribbon(out, pose, footJet, 0.045, inner);
+        }
+        ringAt(out, pose, fx, -0.82, 0.38 + thrust * 0.72, inner, 44, true, t * 2.6);
+    }
+
+    private static void airDash(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
+                                int outer, int inner) {
+        float dash = ease(clamp((t - 0.05F) / 0.16F))
+                * (1.0F - ease(clamp((t - 0.64F) / 0.30F)));
+        double length = 0.35 + dash * 6.0;
+        for (int lane = -3; lane <= 3; lane++) {
+            List<Vec3> trail = new ArrayList<>();
+            for (int i = 0; i <= 24; i++) {
+                double u = i / 24.0;
+                double wave = Math.sin(u * Math.PI * 2.0 + t * 8.0 + lane * 0.4);
+                double side = lane * 0.15 + wave * 0.12;
+                double up = -0.05 + Math.cos(u * Math.PI * 2.0 + t * 7.0) * 0.10;
+                trail.add(point(fx, side, up, 0.45 - u * length));
+            }
+            ribbon(out, pose, trail, lane == 0 ? 0.14 : 0.075, outer);
+            if (lane == 0) ribbon(out, pose, trail, 0.04, inner);
+        }
+
+        for (int sideSign : new int[]{-1, 1}) {
+            List<Vec3> crescent = new ArrayList<>();
+            for (int i = 0; i <= 20; i++) {
+                double u = i / 20.0;
+                crescent.add(point(fx,
+                        sideSign * (1.8 - u * 1.45),
+                        0.12 + Math.sin(u * Math.PI) * 0.78,
+                        0.35 + u * 1.8 * dash));
+            }
+            ribbon(out, pose, crescent, 0.075, inner);
+        }
+        ringAt(out, pose, fx, -0.10, 0.42 + dash * 0.82, inner, 40, true, t * 7.0);
+        ringAt(out, pose, fx, 0.55, 0.24 + dash * 0.56, outer, 36, true, -t * 5.0);
     }
 
     private static void dragon(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
