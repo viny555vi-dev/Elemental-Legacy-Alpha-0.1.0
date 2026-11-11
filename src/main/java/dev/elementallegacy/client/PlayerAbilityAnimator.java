@@ -31,14 +31,20 @@ public final class PlayerAbilityAnimator {
     private static final Map<Integer, ActiveAnimation> ACTIVE = new HashMap<>();
     private static final Set<String> SMOKE_POSES_APPLIED = new HashSet<>();
     private static final Set<String> SMOKE_MODEL_POSES_VERIFIED = new HashSet<>();
+    private static PoseSnapshot SMOKE_NEUTRAL_POSE;
 
     private record ActiveAnimation(String abilityId, long startedAt) {}
+    private record PoseSnapshot(
+            float rightArmX, float leftArmX, float rightArmZ, float leftArmZ,
+            float bodyX, float bodyY, float bodyZ, float rightLegX, float leftLegX
+    ) {}
 
     private PlayerAbilityAnimator() {}
 
     public static void resetSmokeEvidence() {
         SMOKE_POSES_APPLIED.clear();
         SMOKE_MODEL_POSES_VERIFIED.clear();
+        SMOKE_NEUTRAL_POSE = null;
     }
 
     public static void start(int entityId, String abilityId) {
@@ -80,21 +86,49 @@ public final class PlayerAbilityAnimator {
     public static void verifyRenderedPose(net.neoforged.neoforge.client.event.RenderPlayerEvent.Post<?> event) {
         if (!Boolean.getBoolean("elemental.vfx.smoke")) return;
         AvatarRenderState state = event.getRenderState();
-        ActiveAnimation active = ACTIVE.get(state.id);
-        if (active == null || SMOKE_MODEL_POSES_VERIFIED.contains(active.abilityId())) return;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null || state.id != minecraft.player.getId()) return;
+
         var model = event.getRenderer().getModel();
-        float rightArmX = model.rightArm.xRot;
-        float leftArmX = model.leftArm.xRot;
-        float bodyX = model.body.xRot;
-        float rightArmZ = model.rightArm.zRot;
-        float leftArmZ = model.leftArm.zRot;
-        boolean visiblyPosed = Math.abs(rightArmX) > 0.30F || Math.abs(leftArmX) > 0.30F
-                || Math.abs(bodyX) > 0.20F || Math.abs(rightArmZ) > 0.20F || Math.abs(leftArmZ) > 0.20F;
-        if (visiblyPosed && SMOKE_MODEL_POSES_VERIFIED.add(active.abilityId())) {
+        PoseSnapshot current = new PoseSnapshot(
+                model.rightArm.xRot, model.leftArm.xRot,
+                model.rightArm.zRot, model.leftArm.zRot,
+                model.body.xRot, model.body.yRot, model.body.zRot,
+                model.rightLeg.xRot, model.leftLeg.xRot
+        );
+        ActiveAnimation active = ACTIVE.get(state.id);
+        if (active == null) {
+            if (SMOKE_NEUTRAL_POSE == null) {
+                SMOKE_NEUTRAL_POSE = current;
+                System.out.println("[ELEMENTAL_VFX_SMOKE] NEUTRAL_PLAYER_MODEL_CAPTURED");
+            }
+            return;
+        }
+        if (SMOKE_NEUTRAL_POSE == null || SMOKE_MODEL_POSES_VERIFIED.contains(active.abilityId())) return;
+
+        PoseSnapshot neutral = SMOKE_NEUTRAL_POSE;
+        float delta = Math.max(
+                Math.max(Math.abs(current.rightArmX() - neutral.rightArmX()),
+                        Math.abs(current.leftArmX() - neutral.leftArmX())),
+                Math.max(
+                        Math.max(Math.abs(current.rightArmZ() - neutral.rightArmZ()),
+                                Math.abs(current.leftArmZ() - neutral.leftArmZ())),
+                        Math.max(
+                                Math.max(Math.abs(current.bodyX() - neutral.bodyX()),
+                                        Math.max(Math.abs(current.bodyY() - neutral.bodyY()),
+                                                Math.abs(current.bodyZ() - neutral.bodyZ()))),
+                                Math.max(Math.abs(current.rightLegX() - neutral.rightLegX()),
+                                        Math.abs(current.leftLegX() - neutral.leftLegX()))
+                        )
+                )
+        );
+        if (delta > 0.18F && SMOKE_MODEL_POSES_VERIFIED.add(active.abilityId())) {
             System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_MODEL_POSED " + active.abilityId()
                     + " atMs=" + System.currentTimeMillis()
-                    + " rightArmX=" + rightArmX + " leftArmX=" + leftArmX
-                    + " bodyX=" + bodyX + " rightArmZ=" + rightArmZ + " leftArmZ=" + leftArmZ);
+                    + " deltaFromNeutral=" + delta
+                    + " rightArmX=" + current.rightArmX() + " leftArmX=" + current.leftArmX()
+                    + " bodyX=" + current.bodyX() + " bodyY=" + current.bodyY() + " bodyZ=" + current.bodyZ()
+                    + " rightLegX=" + current.rightLegX() + " leftLegX=" + current.leftLegX());
         }
     }
 
@@ -156,14 +190,23 @@ public final class PlayerAbilityAnimator {
                 mainPose = HumanoidModel.ArmPose.TOOT_HORN;
                 offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
-            case "fire_propulsion", "air_dash" -> {
+            case "fire_propulsion" -> {
                 bodyTurn = 5.0F * pulse;
-                bodyLean = -22.0F * pulse;
-                gait = 1.0F;
+                bodyLean = -28.0F * pulse;
+                gait = 0.42F;
                 crouch = false;
-                flyingPose = t > 0.20F && t < 0.88F;
+                flyingPose = t > 0.10F && t < 0.90F;
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+            }
+            case "air_dash" -> {
+                bodyTurn = 34.0F * (float) Math.sin(t * Math.PI * 2.0F) * pulse;
+                bodyLean = 4.0F * charge - 12.0F * release;
+                gait = 0.32F;
+                crouch = false;
+                swimmingPose = true;
+                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "fire_dragon" -> {
                 bodyTurn = 28.0F * pulse;
