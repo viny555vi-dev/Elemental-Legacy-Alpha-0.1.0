@@ -650,6 +650,11 @@ public final class TechniqueVisualRenderer {
      * Defensive stone shell fitted around the player: front/back torso plates,
      * articulated shoulder and arm guards, and segmented leg greaves.
      */
+    /**
+     * Segmented stone armor fitted to the vanilla player proportions. Narrow plates
+     * follow the torso, shoulders, forearms and greaves without enclosing the avatar
+     * in a single oversized cuboid. The shell remains active for the defensive duration.
+     */
     private static void stoneArmor(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float form = ease(clamp(t / 0.13F));
         float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
@@ -659,43 +664,47 @@ public final class TechniqueVisualRenderer {
         int light = 0xFFC3A77C;
         int edge = 0xFFE4D0A7;
 
-        orientedBox(out, pose, fx, point(fx, 0, 0.00, 0.00),
-                0.74 * armor, 0.88 * armor, 0.62 * armor, mid);
-        orientedBox(out, pose, fx, point(fx, 0, 0.08, 0.335),
-                0.52 * armor, 0.56 * armor, 0.055 * armor, light);
-        orientedBox(out, pose, fx, point(fx, 0, 0.08, -0.335),
-                0.52 * armor, 0.56 * armor, 0.055 * armor, dark);
-        orientedBox(out, pose, fx, point(fx, 0, -0.43, 0.00),
-                0.76 * armor, 0.20 * armor, 0.66 * armor, dark);
-        orientedBox(out, pose, fx, point(fx, 0, 0.49, 0.00),
-                0.74 * armor, 0.16 * armor, 0.65 * armor, light);
+        // Thin torso shell with separate chest/back plates and a waist guard.
+        orientedBox(out, pose, fx, point(fx, 0, -0.01, 0.00),
+                0.58 * armor, 0.70 * armor, 0.31 * armor, mid);
+        orientedBox(out, pose, fx, point(fx, 0, 0.00, 0.176),
+                0.50 * armor, 0.53 * armor, 0.045 * armor, light);
+        orientedBox(out, pose, fx, point(fx, 0, 0.00, -0.176),
+                0.50 * armor, 0.53 * armor, 0.045 * armor, dark);
+        orientedBox(out, pose, fx, point(fx, 0, -0.34, 0.00),
+                0.60 * armor, 0.14 * armor, 0.34 * armor, dark);
+        orientedBox(out, pose, fx, point(fx, 0, 0.34, 0.00),
+                0.60 * armor, 0.10 * armor, 0.34 * armor, edge);
 
         for (int sideSign : new int[]{-1, 1}) {
             double side = sideSign;
-            orientedBox(out, pose, fx, point(fx, side * 0.40, 0.36, 0.00),
-                    0.38 * armor, 0.30 * armor, 0.58 * armor, light);
-            orientedBox(out, pose, fx, point(fx, side * 0.46, 0.02, 0.00),
-                    0.29 * armor, 0.46 * armor, 0.38 * armor, mid);
-            orientedBox(out, pose, fx, point(fx, side * 0.46, -0.38, 0.00),
-                    0.30 * armor, 0.38 * armor, 0.40 * armor, light);
-            orientedBox(out, pose, fx, point(fx, side * 0.46, -0.62, 0.00),
-                    0.32 * armor, 0.16 * armor, 0.42 * armor, edge);
-            orientedBox(out, pose, fx, point(fx, side * 0.19, -0.79, 0.00),
-                    0.31 * armor, 0.43 * armor, 0.38 * armor, mid);
-            orientedBox(out, pose, fx, point(fx, side * 0.19, -1.23, 0.01),
-                    0.30 * armor, 0.40 * armor, 0.39 * armor, light);
-            orientedBox(out, pose, fx, point(fx, side * 0.19, -1.45, 0.08),
-                    0.33 * armor, 0.12 * armor, 0.48 * armor, dark);
+            // Shoulder plates sit over the model's shoulder pivot.
+            orientedBox(out, pose, fx, point(fx, side * 0.33, 0.27, 0.00),
+                    0.29 * armor, 0.22 * armor, 0.34 * armor, light);
+            // Two articulated arm segments, leaving a visible elbow break.
+            orientedBox(out, pose, fx, point(fx, side * 0.38, -0.01, 0.00),
+                    0.21 * armor, 0.35 * armor, 0.25 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.38, -0.32, 0.00),
+                    0.22 * armor, 0.28 * armor, 0.26 * armor, light);
+
+            // Separate thigh and shin plates stop at the avatar's feet.
+            orientedBox(out, pose, fx, point(fx, side * 0.16, -0.58, 0.00),
+                    0.23 * armor, 0.31 * armor, 0.25 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.16, -0.89, 0.00),
+                    0.22 * armor, 0.29 * armor, 0.24 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.16, -1.08, 0.035),
+                    0.24 * armor, 0.12 * armor, 0.29 * armor, dark);
         }
 
-        orientedBox(out, pose, fx, point(fx, 0, 0.57, 0.00),
-                0.42 * armor, 0.13 * armor, 0.53 * armor, edge);
+        // A raised chest crest and fine mineral seam create the defensive focal point.
+        orientedBox(out, pose, fx, point(fx, 0, 0.40, 0.00),
+                0.38 * armor, 0.10 * armor, 0.30 * armor, edge);
         List<Vec3> chestSigil = List.of(
-                point(fx, -0.19 * armor, 0.29 * armor, 0.37 * armor),
-                point(fx, 0, -0.02 * armor, 0.38 * armor),
-                point(fx, 0.19 * armor, 0.29 * armor, 0.37 * armor));
-        ribbon(out, pose, chestSigil, 0.028 * armor, edge);
-        ringAt(out, pose, fx, -0.30, 0.72 * armor, 0xFFCAB18B, 44, true, t * 0.18);
+                point(fx, -0.17 * armor, 0.20 * armor, 0.204 * armor),
+                point(fx, 0, -0.02 * armor, 0.207 * armor),
+                point(fx, 0.17 * armor, 0.20 * armor, 0.204 * armor));
+        ribbon(out, pose, chestSigil, 0.022 * armor, edge);
+        ringAt(out, pose, fx, -0.30, 0.62 * armor, 0xFFCAB18B, 40, true, t * 0.16);
     }
 
     
