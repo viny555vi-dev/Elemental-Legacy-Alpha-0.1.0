@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -919,7 +920,7 @@ public final class TechniqueVisualRenderer {
         out.addVertex(pose, (float) p.x, (float) p.y, (float) p.z)
                 .setColor(color)
                 .setUv(u, v)
-                .setOverlay(0)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(0x00F000F0)
                 .setNormal(pose, (float) normal.x, (float) normal.y, (float) normal.z);
     }
