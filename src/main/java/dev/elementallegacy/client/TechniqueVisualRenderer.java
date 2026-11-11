@@ -7,6 +7,8 @@ import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -34,6 +36,24 @@ import java.util.Set;
 @EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
 public final class TechniqueVisualRenderer {
     private static final int DURATION_TICKS = 48;
+    private static final Identifier FIRE_TEXTURE = Identifier.fromNamespaceAndPath(ElementalLegacy.MOD_ID, "textures/vfx/fire.png");
+    private static final Identifier WATER_TEXTURE = Identifier.fromNamespaceAndPath(ElementalLegacy.MOD_ID, "textures/vfx/water.png");
+    private static final Identifier ICE_TEXTURE = Identifier.fromNamespaceAndPath(ElementalLegacy.MOD_ID, "textures/vfx/ice.png");
+    private static final Identifier STONE_TEXTURE = Identifier.fromNamespaceAndPath(ElementalLegacy.MOD_ID, "textures/vfx/stone.png");
+    private static final Identifier AIR_TEXTURE = Identifier.fromNamespaceAndPath(ElementalLegacy.MOD_ID, "textures/vfx/air.png");
+
+    private static RenderType materialType(String abilityId) {
+        if (abilityId.startsWith("flame_") || abilityId.startsWith("fire_") || abilityId.equals("focused_explosion")) {
+            return RenderTypes.entityTranslucent(FIRE_TEXTURE);
+        }
+        if (abilityId.startsWith("ice_")) return RenderTypes.entityTranslucent(ICE_TEXTURE);
+        if (abilityId.startsWith("water_") || abilityId.equals("great_wave")) return RenderTypes.entityTranslucent(WATER_TEXTURE);
+        if (abilityId.startsWith("stone_") || abilityId.startsWith("rock_")
+                || abilityId.equals("seismic_wave") || abilityId.equals("earthquake")) {
+            return RenderTypes.entityCutout(STONE_TEXTURE);
+        }
+        return RenderTypes.entityTranslucent(AIR_TEXTURE);
+    }
     private static int durationTicksFor(String abilityId) {
         return switch (abilityId) {
             case "stone_wall" -> 180;
@@ -115,7 +135,7 @@ public final class TechniqueVisualRenderer {
             }
             event.getSubmitNodeCollector().submitCustomGeometry(
                     poseStack,
-                    RenderTypes.debugQuads(),
+                    materialType(current.abilityId()),
                     (pose, buffer) -> render(current, time, pose, buffer)
             );
             poseStack.popPose();
@@ -625,7 +645,58 @@ public final class TechniqueVisualRenderer {
         }
     }
 
-    /** Heavy defensive plates lock around the torso, shoulders, arms and legs. */
+    /**
+     * Defensive stone shell fitted around the player: front/back torso plates,
+     * articulated shoulder and arm guards, and segmented leg greaves.
+     */
+    private static void stoneArmor(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
+        float form = ease(clamp(t / 0.13F));
+        float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
+        float armor = form * sustain;
+        int dark = 0xFF564331;
+        int mid = 0xFF927858;
+        int light = 0xFFC3A77C;
+        int edge = 0xFFE4D0A7;
+
+        orientedBox(out, pose, fx, point(fx, 0, 0.00, 0.00),
+                0.74 * armor, 0.88 * armor, 0.62 * armor, mid);
+        orientedBox(out, pose, fx, point(fx, 0, 0.08, 0.335),
+                0.52 * armor, 0.56 * armor, 0.055 * armor, light);
+        orientedBox(out, pose, fx, point(fx, 0, 0.08, -0.335),
+                0.52 * armor, 0.56 * armor, 0.055 * armor, dark);
+        orientedBox(out, pose, fx, point(fx, 0, -0.43, 0.00),
+                0.76 * armor, 0.20 * armor, 0.66 * armor, dark);
+        orientedBox(out, pose, fx, point(fx, 0, 0.49, 0.00),
+                0.74 * armor, 0.16 * armor, 0.65 * armor, light);
+
+        for (int sideSign : new int[]{-1, 1}) {
+            double side = sideSign;
+            orientedBox(out, pose, fx, point(fx, side * 0.40, 0.36, 0.00),
+                    0.38 * armor, 0.30 * armor, 0.58 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.46, 0.02, 0.00),
+                    0.29 * armor, 0.46 * armor, 0.38 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.46, -0.38, 0.00),
+                    0.30 * armor, 0.38 * armor, 0.40 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.46, -0.62, 0.00),
+                    0.32 * armor, 0.16 * armor, 0.42 * armor, edge);
+            orientedBox(out, pose, fx, point(fx, side * 0.19, -0.79, 0.00),
+                    0.31 * armor, 0.43 * armor, 0.38 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.19, -1.23, 0.01),
+                    0.30 * armor, 0.40 * armor, 0.39 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.19, -1.45, 0.08),
+                    0.33 * armor, 0.12 * armor, 0.48 * armor, dark);
+        }
+
+        orientedBox(out, pose, fx, point(fx, 0, 0.57, 0.00),
+                0.42 * armor, 0.13 * armor, 0.53 * armor, edge);
+        List<Vec3> chestSigil = List.of(
+                point(fx, -0.19 * armor, 0.29 * armor, 0.37 * armor),
+                point(fx, 0, -0.02 * armor, 0.38 * armor),
+                point(fx, 0.19 * armor, 0.29 * armor, 0.37 * armor));
+        ribbon(out, pose, chestSigil, 0.028 * armor, edge);
+        ringAt(out, pose, fx, -0.30, 0.72 * armor, 0xFFCAB18B, 44, true, t * 0.18);
+    }
+
     private static void stoneArmor(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float form = ease(clamp(t / 0.13F));
         float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
@@ -869,19 +940,28 @@ public final class TechniqueVisualRenderer {
 
     private static void quad(VertexConsumer out, PoseStack.Pose pose, Vec3 a, Vec3 b,
                              Vec3 c, Vec3 d, int color) {
-        vertex(out, pose, a, color);
-        vertex(out, pose, b, color);
-        vertex(out, pose, c, color);
-        vertex(out, pose, d, color);
-        // Reverse winding as well: several effects are viewed from both sides during a cast.
-        vertex(out, pose, d, color);
-        vertex(out, pose, c, color);
-        vertex(out, pose, b, color);
-        vertex(out, pose, a, color);
+        Vec3 normal = b.subtract(a).cross(c.subtract(a));
+        if (normal.lengthSqr() < 0.000001) normal = new Vec3(0, 1, 0);
+        else normal = normal.normalize();
+        vertex(out, pose, a, color, 0.0F, 1.0F, normal);
+        vertex(out, pose, b, color, 1.0F, 1.0F, normal);
+        vertex(out, pose, c, color, 1.0F, 0.0F, normal);
+        vertex(out, pose, d, color, 0.0F, 0.0F, normal);
+        Vec3 reverse = normal.scale(-1.0);
+        vertex(out, pose, d, color, 0.0F, 0.0F, reverse);
+        vertex(out, pose, c, color, 1.0F, 0.0F, reverse);
+        vertex(out, pose, b, color, 1.0F, 1.0F, reverse);
+        vertex(out, pose, a, color, 0.0F, 1.0F, reverse);
     }
 
-    private static void vertex(VertexConsumer out, PoseStack.Pose pose, Vec3 p, int color) {
-        out.addVertex(pose, (float) p.x, (float) p.y, (float) p.z).setColor(color);
+    private static void vertex(VertexConsumer out, PoseStack.Pose pose, Vec3 p, int color,
+                               float u, float v, Vec3 normal) {
+        out.addVertex(pose, (float) p.x, (float) p.y, (float) p.z)
+                .setColor(color)
+                .setUv(u, v)
+                .setOverlay(0)
+                .setLight(0x00F000F0)
+                .setNormal(pose, (float) normal.x, (float) normal.y, (float) normal.z);
     }
 
     private static float ease(float value) {
