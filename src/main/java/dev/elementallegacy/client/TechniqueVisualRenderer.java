@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -33,6 +34,18 @@ import java.util.Set;
 @EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
 public final class TechniqueVisualRenderer {
     private static final int DURATION_TICKS = 48;
+    private static int durationTicksFor(String abilityId) {
+        return switch (abilityId) {
+            case "stone_wall" -> 180;
+            case "ice_bind" -> 140;
+            case "rock_cage" -> 120;
+            case "stone_armor" -> 220;
+            case "water_shield", "air_shield" -> 120;
+            case "earthquake" -> 96;
+            case "seismic_wave" -> 72;
+            default -> DURATION_TICKS;
+        };
+    }
     private static final Map<Integer, ActiveEffect> ACTIVE = new HashMap<>();
     private static final Set<String> SMOKE_MESHES_SUBMITTED = new HashSet<>();
     private static final String[] SMOKE_ABILITIES = {
@@ -42,7 +55,7 @@ public final class TechniqueVisualRenderer {
             "air_blast", "air_push", "air_shield", "air_jump", "air_dash", "cyclone"
     };
 
-    private record ActiveEffect(String abilityId, Vec3 origin, Vec3 forward, Vec3 right, long startedAt) {}
+    private record ActiveEffect(String abilityId, Vec3 origin, Vec3 forward, Vec3 right, long startedAt, int durationTicks) {}
     private static boolean smokeStarted;
     private static int smokeNextTick;
     private static int smokeIndex;
@@ -62,7 +75,7 @@ public final class TechniqueVisualRenderer {
         if (right.lengthSqr() < 0.0001) right = new Vec3(1.0, 0.0, 0.0);
         else right = right.normalize();
         Vec3 origin = entity.position().add(0.0, Math.max(0.8, entity.getBbHeight() * 0.62), 0.0);
-        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime()));
+        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(), durationTicksFor(abilityId)));
     }
 
     @SubscribeEvent
@@ -81,7 +94,7 @@ public final class TechniqueVisualRenderer {
 
         while (iterator.hasNext()) {
             ActiveEffect effect = iterator.next().getValue();
-            float progress = (float) ((gameTime + partial - effect.startedAt()) / DURATION_TICKS);
+            float progress = (float) ((gameTime + partial - effect.startedAt()) / effect.durationTicks());
             if (progress >= 1.0F) {
                 iterator.remove();
                 continue;
@@ -129,7 +142,7 @@ public final class TechniqueVisualRenderer {
             smokeIndex = 0;
             smokeFinishedLogged = false;
             submitLogged = false;
-            smokeNextTick = mc.player.tickCount + 30;
+            smokeNextTick = mc.player.tickCount + 80;
         }
         if (smokeIndex >= SMOKE_ABILITIES.length) {
             if (!smokeFinishedLogged) {
@@ -144,7 +157,7 @@ public final class TechniqueVisualRenderer {
         start(mc.player.getId(), ability);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
-        smokeNextTick = mc.player.tickCount + DURATION_TICKS + 5;
+        smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
     }
 
     private static void render(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -385,16 +398,62 @@ public final class TechniqueVisualRenderer {
         return point(fx, side, height, depth + Math.sin(u * Math.PI * 2.0 + t * 5.0) * 0.18);
     }
 
+    /**
+     * A full glacial prison: twelve rising faceted pillars, three ice bands,
+     * a cross-braced lattice and a frosted crown. The cage samples the terrain
+     * below every pillar so it grows out of uneven ground instead of floating.
+     */
     private static void iceCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float rise = ease(clamp((t - 0.08F) / 0.48F));
-        for (int i = 0; i < 8; i++) {
-            double angle = Math.PI * 2.0 * i / 8.0;
-            double side = Math.cos(angle) * 0.8;
-            double forward = 3.0 + Math.sin(angle) * 0.8;
-            spike(out, pose, point(fx, side, 1.35 * rise, forward), 0.23, 1.35 * rise, 0xFF7DDCF4);
+        float rise = ease(clamp(t / 0.17F));
+        float release = 1.0F - ease(clamp((t - 0.86F) / 0.14F));
+        float formed = rise * release;
+        double radius = 1.52;
+        double centerForward = 3.25;
+        List<Vec3> crown = new ArrayList<>();
+        List<Vec3> waist = new ArrayList<>();
+
+        for (int i = 0; i < 12; i++) {
+            double angle = Math.PI * 2.0 * i / 12.0;
+            double side = Math.cos(angle) * radius;
+            double forward = centerForward + Math.sin(angle) * radius;
+            double base = terrainOffset(fx, side, forward);
+            double height = (3.25 + (i % 3) * 0.20) * formed;
+            Vec3 center = point(fx, side, base + height * 0.48, forward);
+
+            orientedBox(out, pose, fx, center, 0.30, Math.max(0.04, height * 0.92), 0.34,
+                    i % 3 == 0 ? 0xFFB8F5FF : 0xFF63BBDD);
+            orientedBox(out, pose, fx,
+                    point(fx, side, base + height * 0.53, forward + 0.015),
+                    0.13, Math.max(0.03, height * 0.78), 0.035, 0xFFE5FCFF);
+            if (height > 0.2) {
+                spike(out, pose, point(fx, side, base + height - 0.32, forward),
+                        0.23, 0.62 * formed, 0xFFD7F8FF);
+                List<Vec3> vein = List.of(
+                        point(fx, side - 0.045, base + 0.18, forward + 0.18),
+                        point(fx, side + 0.025, base + height * 0.48, forward + 0.18),
+                        point(fx, side - 0.025, base + height * 0.88, forward + 0.18));
+                ribbon(out, pose, vein, 0.026, 0xFFF0FFFF);
+            }
+            crown.add(point(fx, side, base + height, forward));
+            waist.add(point(fx, side, base + height * 0.52, forward));
         }
-        ring(out, pose, fx, 3.0, 0.9, 0xFFE0FAFF, 36, t * 1.4);
-        orb(out, pose, point(fx, 0, 1.4 * rise, 3.0), 0.3, 0xFFA9EDFF, 7, 12);
+
+        for (int band = 0; band < 3; band++) {
+            double lift = band == 0 ? 0.16 : (band == 1 ? 1.66 : 3.15);
+            groundRing(fx, pose, out, centerForward, radius * (band == 1 ? 0.94 : 1.0),
+                    lift * formed, band == 1 ? 0xFF8DE4FA : 0xFFE8FDFF, 48);
+        }
+        for (int i = 0; i < 12; i++) {
+            int next = (i + 1) % 12;
+            if ((i & 1) == 0) {
+                ribbon(out, pose, List.of(waist.get(i), crown.get(next)), 0.055, 0xFF8DE4FA);
+                ribbon(out, pose, List.of(crown.get(i), waist.get(next)), 0.035, 0xFFDDFBFF);
+            }
+        }
+        groundRing(fx, pose, out, centerForward, radius + 0.42, 0.035,
+                0xFFB8F4FF, 56);
+        orb(out, pose, point(fx, 0, terrainOffset(fx, 0, centerForward) + 1.58 * formed,
+                centerForward), 0.20 * formed, 0xFFB9F3FF, 8, 14);
     }
 
     private static void iceBlades(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -437,17 +496,62 @@ public final class TechniqueVisualRenderer {
         }
     }
 
+    /**
+     * A broad rampart grown from the actual block surface: layered stone courses,
+     * a raised foundation, buttresses, irregular merlons and visible fracture seams.
+     */
     private static void stoneWall(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float build = ease(clamp((t - 0.08F) / 0.66F));
-        for (int x = -3; x <= 3; x++) {
-            double rowHeight = 0.42 + ((x + 3) % 2) * 0.12;
-            double h = Math.max(0, build * 2.65 - Math.abs(x) * 0.07);
-            box(out, pose, point(fx, x * 0.42, h * 0.5, 3.0), 0.39, Math.max(0.04, h), 0.3,
-                    (x % 2 == 0) ? 0xFF9B805E : 0xFF705A43);
-            if (build > 0.25F) {
-                spike(out, pose, point(fx, x * 0.42, h, 3.0), 0.13, Math.max(0.1, rowHeight * 0.6), 0xFFC4A77B);
+        float build = ease(clamp(t / 0.20F));
+        float retract = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
+        float formed = build * retract;
+        double forward = 3.8;
+        List<Vec3> crownLine = new ArrayList<>();
+        List<Vec3> foundation = new ArrayList<>();
+
+        for (int x = -6; x <= 6; x++) {
+            double side = x * 0.62;
+            double ground = terrainOffset(fx, side, forward);
+            double irregular = 4.15 + 0.25 * Math.sin(x * 1.7) + ((x % 3 == 0) ? 0.22 : 0.0);
+            double height = irregular * formed;
+            int tone = Math.floorMod(x, 3) == 0 ? 0xFF8D785D :
+                    (Math.floorMod(x, 3) == 1 ? 0xFF74614B : 0xFFA38A69);
+
+            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.50, forward),
+                    0.66, Math.max(0.03, height), 0.76, tone);
+            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.16, forward + 0.405),
+                    0.64, Math.max(0.035, height * 0.22), 0.045, 0xFFB39A72);
+            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.84, forward + 0.405),
+                    0.64, Math.max(0.035, height * 0.12), 0.045, 0xFFBDA47D);
+
+            if (Math.floorMod(x, 3) == 0) {
+                orientedBox(out, pose, fx, point(fx, side, ground + height * 0.52, forward - 0.02),
+                        0.78, Math.max(0.04, height * 1.05), 0.92, 0xFF66533F);
+                orientedBox(out, pose, fx, point(fx, side, ground + height + 0.19 * formed, forward),
+                        0.48, 0.38 * formed, 0.82, 0xFFC2A57A);
             }
+            if (Math.floorMod(x, 2) == 0) {
+                spike(out, pose, point(fx, side, ground + height - 0.28 * formed, forward),
+                        0.19, 0.72 * formed, 0xFFC8B28E);
+            }
+
+            crownLine.add(point(fx, side, ground + height, forward));
+            foundation.add(point(fx, side, ground + 0.08 * formed, forward + 0.46));
         }
+
+        for (int course = 1; course <= 5; course++) {
+            List<Vec3> seam = new ArrayList<>();
+            for (int x = -6; x <= 6; x++) {
+                double side = x * 0.62;
+                double ground = terrainOffset(fx, side, forward);
+                double height = (4.15 + 0.25 * Math.sin(x * 1.7)) * formed;
+                seam.add(point(fx, side, ground + height * course / 6.0, forward + 0.395));
+            }
+            ribbon(out, pose, seam, 0.025, 0xFF4D4033);
+        }
+
+        ribbon(out, pose, crownLine, 0.055, 0xFFD7C09A);
+        ribbon(out, pose, foundation, 0.09, 0xFF5E4C39);
+        groundRing(fx, pose, out, forward, 4.25, 0.045, 0xFFB79B73, 56);
     }
 
     private static void rockCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -461,38 +565,107 @@ public final class TechniqueVisualRenderer {
         ring(out, pose, fx, 3.2, 1.05, 0xFFD5B88B, 42, t);
     }
 
+    /**
+     * The ground is the main character of this technique: terrain-following cracks,
+     * lifted stone plates, debris spires and expanding fault rings make the impact
+     * read as a real earthquake rather than a row of floating spikes.
+     */
     private static void seismic(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out, boolean wide) {
-        float wave = ease(clamp((t - 0.08F) / 0.62F));
-        int count = wide ? 11 : 7;
-        for (int i = 0; i < count; i++) {
-            double side = (i - (count - 1) / 2.0) * (wide ? 0.48 : 0.42);
-            double z = 1.2 + (i % 4) * 1.25 + wave * 1.7;
-            double lift = Math.max(0.0, Math.min(1.0, wave * 1.45 - (i % 4) * 0.10));
-            if (lift > 0.02) spike(out, pose, point(fx, side, 0.62 * lift, z), wide ? 0.32 : 0.25,
-                    (wide ? 1.2 : 0.9) * lift, 0xFF9D8260);
-        }
-        for (int crack = 0; crack < (wide ? 7 : 4); crack++) {
-            List<Vec3> line = new ArrayList<>();
-            double sideBase = (crack - (wide ? 3 : 1.5)) * 0.42;
-            for (int n = 0; n <= 9; n++) {
-                double u = n / 9.0;
-                double jitter = Math.sin(n * 2.3 + crack) * 0.14;
-                line.add(point(fx, sideBase + jitter, -0.9, 0.6 + u * (4.8 + wave * 2.3)));
+        float wave = ease(clamp(t / 0.28F));
+        float decay = 1.0F - ease(clamp((t - 0.82F) / 0.18F));
+        double reach = (wide ? 8.0 : 5.6) * wave;
+        double centerForward = 2.6;
+        int rows = wide ? 5 : 3;
+        int columns = wide ? 9 : 7;
+
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < columns; col++) {
+                double side = (col - (columns - 1) * 0.5) * (wide ? 1.18 : 0.92);
+                double forward = centerForward + row * (wide ? 1.35 : 1.15) + 0.25 * Math.sin(col * 1.4 + row);
+                double ground = terrainOffset(fx, side, forward);
+                double phase = t * 17.0 + row * 1.9 + col * 1.23;
+                double lift = (0.08 + Math.max(0.0, Math.sin(phase)) * (wide ? 0.72 : 0.46)) * wave * decay;
+                double tilt = 0.08 * Math.sin(phase * 0.65);
+                int rockColor = ((row + col) & 1) == 0 ? 0xFF8B7457 : 0xFF6F5B46;
+                orientedBox(out, pose, fx, point(fx, side, ground + 0.10 + lift, forward),
+                        wide ? 0.92 : 0.72, 0.20 + lift * 0.42, wide ? 1.10 : 0.92, rockColor);
+                if ((row + col) % 4 == 0) {
+                    spike(out, pose, point(fx, side + tilt, ground + 0.18 + lift, forward),
+                            wide ? 0.30 : 0.22, (wide ? 0.95 : 0.65) * wave * decay, 0xFFB69A70);
+                }
             }
-            ribbon(out, pose, line, wide ? 0.055 : 0.04, 0xFF4A372A);
         }
-        ring(out, pose, fx, 2.5 + wave * 4.0, (wide ? 3.4 : 2.0) * wave + 0.15, 0xFFD3B68D, 52, t * 2.0);
+
+        int fissures = wide ? 13 : 8;
+        for (int crack = 0; crack < fissures; crack++) {
+            double angle = Math.PI * 2.0 * crack / fissures + 0.11 * Math.sin(crack * 2.1);
+            List<Vec3> line = new ArrayList<>();
+            List<Vec3> inner = new ArrayList<>();
+            for (int n = 0; n <= 18; n++) {
+                double u = n / 18.0;
+                double distance = 0.6 + u * reach;
+                double jagged = Math.sin(n * 1.83 + crack * 2.7) * (0.12 + u * 0.20);
+                double side = Math.cos(angle) * distance + Math.cos(angle + 1.2) * jagged;
+                double forward = centerForward + Math.sin(angle) * distance + Math.sin(angle + 1.2) * jagged;
+                Vec3 crackPoint = groundPoint(fx, side, 0.035, forward);
+                line.add(crackPoint);
+                inner.add(crackPoint.add(0, 0.012, 0));
+            }
+            ribbon(out, pose, line, wide ? 0.095 : 0.065, 0xFF3F3025);
+            ribbon(out, pose, inner, wide ? 0.027 : 0.020, 0xFFC39B64);
+        }
+
+        groundRing(fx, pose, out, centerForward, 2.2 + reach * 0.32, 0.055,
+                0xFFE1C59B, 64);
+        if (wide) {
+            groundRing(fx, pose, out, centerForward, 4.4 + reach * 0.40, 0.035,
+                    0xFF9A7855, 72);
+            groundRing(fx, pose, out, centerForward, 6.2 + reach * 0.18, 0.025,
+                    0xFFD2B48A, 72);
+        }
     }
 
+    /** Heavy defensive plates lock around the torso, shoulders, arms and legs. */
     private static void stoneArmor(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float form = ease(clamp((t - 0.05F) / 0.48F));
-        for (int i = 0; i < 8; i++) {
-            double a = Math.PI * 2.0 * i / 8.0;
-            Vec3 center = point(fx, Math.cos(a) * 0.48, -0.05 + Math.sin(a) * 0.65, Math.sin(a) * 0.42);
-            box(out, pose, center, 0.26 * form + 0.04, 0.38 * form + 0.04, 0.18,
-                    i % 2 == 0 ? 0xFF8D7659 : 0xFFC0A47A);
+        float form = ease(clamp(t / 0.13F));
+        float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
+        float armor = form * sustain;
+        int dark = 0xFF66513B;
+        int mid = 0xFF927858;
+        int light = 0xFFC3A77C;
+        int edge = 0xFFE0C99C;
+
+        orientedBox(out, pose, fx, point(fx, 0, 0.02, 0.34), 1.02 * armor, 1.05 * armor, 0.46 * armor, mid);
+        orientedBox(out, pose, fx, point(fx, 0, 0.16, 0.585), 0.70 * armor, 0.60 * armor, 0.055 * armor, light);
+        orientedBox(out, pose, fx, point(fx, 0, -0.38, 0.52), 0.82 * armor, 0.22 * armor, 0.08 * armor, dark);
+
+        for (int sideSign : new int[]{-1, 1}) {
+            double side = sideSign;
+            orientedBox(out, pose, fx, point(fx, side * 0.66, 0.42, 0.20),
+                    0.62 * armor, 0.48 * armor, 0.58 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.76, -0.12, 0.28),
+                    0.37 * armor, 0.72 * armor, 0.43 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.76, -0.12, 0.515),
+                    0.25 * armor, 0.54 * armor, 0.045 * armor, edge);
+            orientedBox(out, pose, fx, point(fx, side * 0.36, -0.80, 0.22),
+                    0.43 * armor, 0.50 * armor, 0.42 * armor, mid);
+            orientedBox(out, pose, fx, point(fx, side * 0.36, -1.27, 0.25),
+                    0.39 * armor, 0.40 * armor, 0.38 * armor, light);
+            orientedBox(out, pose, fx, point(fx, side * 0.48, 0.76, -0.05),
+                    0.34 * armor, 0.35 * armor, 0.40 * armor, dark);
         }
-        ringAt(out, pose, fx, -0.25, 0.72, 0xFFDCC39A, 40, true, t);
+
+        orientedBox(out, pose, fx, point(fx, 0, 0.88, 0.08),
+                0.54 * armor, 0.35 * armor, 0.45 * armor, mid);
+        orientedBox(out, pose, fx, point(fx, 0, 1.02, 0.28),
+                0.42 * armor, 0.08 * armor, 0.18 * armor, edge);
+
+        List<Vec3> chestSeam = List.of(
+                point(fx, -0.40 * armor, 0.44 * armor, 0.62 * armor),
+                point(fx, 0, 0.12 * armor, 0.64 * armor),
+                point(fx, 0.40 * armor, 0.44 * armor, 0.62 * armor));
+        ribbon(out, pose, chestSeam, 0.035 * armor, edge);
+        ringAt(out, pose, fx, -0.25, 0.92 * armor, 0xFFCAB18B, 44, true, t * 0.25);
     }
 
     private static void airPush(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -596,6 +769,58 @@ public final class TechniqueVisualRenderer {
                 quad(out, pose, a, b, c, d, color);
             }
         }
+    }
+
+    /** Samples the top walkable surface at the given local effect coordinate. */
+    private static double terrainOffset(ActiveEffect fx, double side, double forward) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return -1.0;
+        double worldX = fx.origin().x + fx.right().x * side + fx.forward().x * forward;
+        double worldZ = fx.origin().z + fx.right().z * side + fx.forward().z * forward;
+        int blockX = (int) Math.floor(worldX);
+        int blockZ = (int) Math.floor(worldZ);
+        int surfaceY = mc.level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        return surfaceY - fx.origin().y + 0.025;
+    }
+
+    private static Vec3 groundPoint(ActiveEffect fx, double side, double lift, double forward) {
+        return point(fx, side, terrainOffset(fx, side, forward) + lift, forward);
+    }
+
+    private static void groundRing(ActiveEffect fx, PoseStack.Pose pose, VertexConsumer out,
+                                   double centerForward, double radius, double lift,
+                                   int color, int segments) {
+        List<Vec3> path = new ArrayList<>();
+        for (int i = 0; i <= segments; i++) {
+            double angle = Math.PI * 2.0 * i / segments;
+            double side = Math.cos(angle) * radius;
+            double forward = centerForward + Math.sin(angle) * radius;
+            path.add(groundPoint(fx, side, lift, forward));
+        }
+        ribbon(out, pose, path, 0.055, color);
+    }
+
+    /** A cuboid aligned to the caster's facing direction, not to world X/Z. */
+    private static void orientedBox(VertexConsumer out, PoseStack.Pose pose, ActiveEffect fx,
+                                    Vec3 center, double width, double height, double depth, int color) {
+        double x = width * 0.5, y = height * 0.5, z = depth * 0.5;
+        Vec3 side = fx.right().scale(x);
+        Vec3 up = new Vec3(0.0, y, 0.0);
+        Vec3 forward = fx.forward().scale(z);
+        Vec3 a = center.subtract(side).subtract(up).subtract(forward);
+        Vec3 b = center.add(side).subtract(up).subtract(forward);
+        Vec3 c = center.add(side).add(up).subtract(forward);
+        Vec3 d = center.subtract(side).add(up).subtract(forward);
+        Vec3 e = center.subtract(side).subtract(up).add(forward);
+        Vec3 f = center.add(side).subtract(up).add(forward);
+        Vec3 g = center.add(side).add(up).add(forward);
+        Vec3 h = center.subtract(side).add(up).add(forward);
+        quad(out, pose, a, b, c, d, color);
+        quad(out, pose, e, h, g, f, color);
+        quad(out, pose, a, e, f, b, color);
+        quad(out, pose, d, c, g, h, color);
+        quad(out, pose, a, d, h, e, color);
+        quad(out, pose, b, f, g, c, color);
     }
 
     private static void spike(VertexConsumer out, PoseStack.Pose pose, Vec3 base,
