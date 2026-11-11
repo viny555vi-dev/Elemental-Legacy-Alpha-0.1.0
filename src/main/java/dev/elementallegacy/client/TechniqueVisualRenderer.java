@@ -697,47 +697,7 @@ public final class TechniqueVisualRenderer {
         ringAt(out, pose, fx, -0.30, 0.72 * armor, 0xFFCAB18B, 44, true, t * 0.18);
     }
 
-    private static void stoneArmor(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float form = ease(clamp(t / 0.13F));
-        float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
-        float armor = form * sustain;
-        int dark = 0xFF66513B;
-        int mid = 0xFF927858;
-        int light = 0xFFC3A77C;
-        int edge = 0xFFE0C99C;
-
-        orientedBox(out, pose, fx, point(fx, 0, 0.02, 0.34), 1.02 * armor, 1.05 * armor, 0.46 * armor, mid);
-        orientedBox(out, pose, fx, point(fx, 0, 0.16, 0.585), 0.70 * armor, 0.60 * armor, 0.055 * armor, light);
-        orientedBox(out, pose, fx, point(fx, 0, -0.38, 0.52), 0.82 * armor, 0.22 * armor, 0.08 * armor, dark);
-
-        for (int sideSign : new int[]{-1, 1}) {
-            double side = sideSign;
-            orientedBox(out, pose, fx, point(fx, side * 0.66, 0.42, 0.20),
-                    0.62 * armor, 0.48 * armor, 0.58 * armor, light);
-            orientedBox(out, pose, fx, point(fx, side * 0.76, -0.12, 0.28),
-                    0.37 * armor, 0.72 * armor, 0.43 * armor, mid);
-            orientedBox(out, pose, fx, point(fx, side * 0.76, -0.12, 0.515),
-                    0.25 * armor, 0.54 * armor, 0.045 * armor, edge);
-            orientedBox(out, pose, fx, point(fx, side * 0.36, -0.80, 0.22),
-                    0.43 * armor, 0.50 * armor, 0.42 * armor, mid);
-            orientedBox(out, pose, fx, point(fx, side * 0.36, -1.27, 0.25),
-                    0.39 * armor, 0.40 * armor, 0.38 * armor, light);
-            orientedBox(out, pose, fx, point(fx, side * 0.48, 0.76, -0.05),
-                    0.34 * armor, 0.35 * armor, 0.40 * armor, dark);
-        }
-
-        orientedBox(out, pose, fx, point(fx, 0, 0.88, 0.08),
-                0.54 * armor, 0.35 * armor, 0.45 * armor, mid);
-        orientedBox(out, pose, fx, point(fx, 0, 1.02, 0.28),
-                0.42 * armor, 0.08 * armor, 0.18 * armor, edge);
-
-        List<Vec3> chestSeam = List.of(
-                point(fx, -0.40 * armor, 0.44 * armor, 0.62 * armor),
-                point(fx, 0, 0.12 * armor, 0.64 * armor),
-                point(fx, 0.40 * armor, 0.44 * armor, 0.62 * armor));
-        ribbon(out, pose, chestSeam, 0.035 * armor, edge);
-        ringAt(out, pose, fx, -0.25, 0.92 * armor, 0xFFCAB18B, 44, true, t * 0.25);
-    }
+    
 
     private static void airPush(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float expand = ease(clamp((t - 0.08F) / 0.56F));
