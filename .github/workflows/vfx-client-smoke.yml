@@ -247,10 +247,7 @@ jobs:
             done
 
             if [ "$JOINED" -eq 1 ]; then
-              # Hide chat, hotbar and tutorial overlays so the player pose and 3D effect remain readable.
-              xdotool key --clearmodifiers F1
-              sleep 0.5
-              echo "Minecraft HUD hidden for clean visual evidence."
+              # The client smoke mode hides and restores the HUD directly through Minecraft options.
               python3 "$RUNNER_TEMP/rcon_smoke.py"
               # The smoke client keeps the caster visible in third-person back view.
             fi

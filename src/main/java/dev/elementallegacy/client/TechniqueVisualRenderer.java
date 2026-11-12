@@ -78,6 +78,7 @@ public final class TechniqueVisualRenderer {
 
     private record ActiveEffect(String abilityId, Vec3 origin, Vec3 forward, Vec3 right, long startedAt, int durationTicks) {}
     private static boolean smokeStarted;
+    private static boolean smokeOriginalHideGui;
     private static int smokeNextTick;
     private static int smokeIndex;
     private static String pendingSmokeAbility;
@@ -158,6 +159,9 @@ public final class TechniqueVisualRenderer {
         }
         if (!smokeStarted) {
             smokeStarted = true;
+            smokeOriginalHideGui = mc.options.hideGui;
+            mc.options.hideGui = true;
+            System.out.println("[ELEMENTAL_VFX_SMOKE] HUD_HIDDEN true");
             mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
             SMOKE_MESHES_SUBMITTED.clear();
             PlayerAbilityAnimator.resetSmokeEvidence();
@@ -170,6 +174,8 @@ public final class TechniqueVisualRenderer {
         if (smokeIndex >= SMOKE_ABILITIES.length) {
             if (!smokeFinishedLogged) {
                 smokeFinishedLogged = true;
+                mc.options.hideGui = smokeOriginalHideGui;
+                System.out.println("[ELEMENTAL_VFX_SMOKE] HUD_RESTORED " + smokeOriginalHideGui);
                 System.out.println("[ELEMENTAL_VFX_SMOKE] COMPLETED: all 24 techniques rendered.");
             }
             return;
