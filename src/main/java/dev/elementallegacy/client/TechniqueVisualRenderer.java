@@ -855,7 +855,7 @@ public final class TechniqueVisualRenderer {
                     layer == 1 ? 0xE3F5FFFF : 0xC879E6DB, 80, 0.13 - layer * 0.015);
         }
         ringAtWide(out, pose, fx, -0.42, radius * 0.72, 0xB879F2E4, 64, true, t * 3.0, 0.10);
-        ringAtWide(out, pose, fx, 0.06, radius * 0.88, 0xDDEFFFFFFF, 64, true, -t * 2.2, 0.095);
+        ringAtWide(out, pose, fx, 0.06, radius * 0.88, 0xDDEFFBFF, 64, true, -t * 2.2, 0.095);
 
         // Twelve wide pressure vanes fan outward and curl upward at their leading edge.
         for (int ray = 0; ray < 12; ray++) {
