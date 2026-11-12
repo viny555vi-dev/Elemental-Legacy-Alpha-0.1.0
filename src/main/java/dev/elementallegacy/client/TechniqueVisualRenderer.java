@@ -254,41 +254,43 @@ public final class TechniqueVisualRenderer {
 
     private static void projectile(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                    int outer, int core, double radius) {
-        // Keep the projectile inside the four-block third-person camera envelope.
-        // A larger layered core, thick outer sheath and paired rings make it readable
-        // against the world instead of disappearing as a tiny point far beyond the player.
-        float travel = ease(clamp((t - 0.08F) / 0.72F));
-        double z = 0.55 + travel * 2.35;
-        double bob = Math.sin(t * Math.PI * 6.0) * 0.10;
+        // Launch from just beyond the casting hand and keep the core outside the
+        // avatar's silhouette in third-person view, rather than drawing it directly
+        // behind the player's torso along the camera axis.
+        float travel = ease(clamp((t - 0.04F) / 0.72F));
+        double z = 0.85 + travel * 3.25;
+        double side = 0.58 + Math.sin(t * Math.PI * 5.0) * 0.08;
+        double height = 0.24 + Math.sin(t * Math.PI * 6.0) * 0.10;
         List<Vec3> trail = List.of(
-                point(fx, 0, 0.02, 0.22),
-                point(fx, 0.08, 0.12, z - 0.68),
-                point(fx, -0.06, -0.05, z - 0.18)
+                point(fx, side - 0.16, height - 0.08, 0.28),
+                point(fx, side - 0.02, height + 0.12, z - 0.82),
+                point(fx, side + 0.10, height + 0.02, z - 0.20)
         );
-        ribbon(out, pose, trail, radius * 0.86, outer);
-        ribbon(out, pose, trail, radius * 0.34, core);
-        Vec3 center = point(fx, 0, bob, z);
-        orb(out, pose, center, radius * 1.42, outer, 10, 18);
-        orb(out, pose, center, radius * 0.72, core, 8, 16);
-        ring(out, pose, fx, z - 0.08, radius * 2.00, core, 36, t * 2.8);
-        ring(out, pose, fx, z - 0.10, radius * 2.25, outer, 32, -t * 2.1);
+        ribbon(out, pose, trail, radius * 1.02, outer);
+        ribbon(out, pose, trail, radius * 0.42, core);
+        Vec3 center = point(fx, side, height, z);
+        orb(out, pose, center, radius * 1.68, outer, 10, 18);
+        orb(out, pose, center, radius * 0.94, core, 8, 16);
+        ring(out, pose, fx, z - 0.08, radius * 2.18, core, 36, t * 2.8);
+        ring(out, pose, fx, z - 0.10, radius * 2.55, outer, 32, -t * 2.1);
     }
 
     private static void coneBurst(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                   int outer, int inner) {
-        float extend = ease(clamp((t - 0.12F) / 0.5F));
+        float extend = ease(clamp((t - 0.10F) / 0.48F));
         for (int lane = -5; lane <= 5; lane++) {
-            double side = lane * 0.33 * extend;
-            double z = 1.0 + extend * 4.6;
+            double spread = lane * 0.52 * extend;
+            double z = 0.82 + extend * 4.25;
+            double lift = 0.26 + Math.abs(lane) * 0.055;
             List<Vec3> path = List.of(
-                    point(fx, lane * 0.05, 0.05, 0.25),
-                    point(fx, side * 0.55, 0.18 + Math.abs(lane) * 0.035, z * 0.55),
-                    point(fx, side, 0.10, z)
+                    point(fx, lane * 0.035, 0.20, 0.34),
+                    point(fx, spread * 0.62, 0.42 + lift * 0.35, z * 0.54),
+                    point(fx, spread * 1.18, lift, z)
             );
-            ribbon(out, pose, path, 0.12 + (5 - Math.abs(lane)) * 0.018, outer);
-            ribbon(out, pose, path, 0.045, inner);
+            ribbon(out, pose, path, 0.15 + (5 - Math.abs(lane)) * 0.022, outer);
+            ribbon(out, pose, path, 0.055, inner);
         }
-        ring(out, pose, fx, 1.0 + extend * 4.6, 1.4 * extend + 0.1, inner, 42, t);
+        ring(out, pose, fx, 0.82 + extend * 4.25, 1.65 * extend + 0.12, inner, 42, t);
     }
 
     private static void whip(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
@@ -564,19 +566,20 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockProjectiles(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp((t - 0.08F) / 0.62F));
+        float travel = ease(clamp((t - 0.04F) / 0.62F));
         for (int i = 0; i < 3; i++) {
-            double z = 0.65 + travel * 2.10 + i * 0.28;
-            double side = (i - 1) * 0.46 + Math.sin(t * 8.0 + i) * 0.08;
-            Vec3 rock = point(fx, side, 0.22 + Math.sin(t * 11.0 + i) * 0.10, z);
+            double z = 1.00 + travel * 3.00 + i * 0.24;
+            double side = (i - 1) * 0.92 + Math.sin(t * 8.0 + i) * 0.12;
+            double height = 0.42 + Math.sin(t * 11.0 + i) * 0.12;
+            Vec3 rock = point(fx, side, height, z);
             List<Vec3> trail = List.of(
-                    point(fx, side * 0.78, 0.16, z - 0.48),
-                    point(fx, side, 0.20, z - 0.18),
+                    point(fx, side * 0.78, height * 0.72, z - 0.72),
+                    point(fx, side, height + 0.10, z - 0.28),
                     rock
             );
-            ribbon(out, pose, trail, 0.13, 0xFFB79A72);
-            spike(out, pose, rock, 0.43, 0.82, 0xFF8E765B);
-            orb(out, pose, rock.add(0, -0.08, 0), 0.18, 0xFFD9BD91, 7, 10);
+            ribbon(out, pose, trail, 0.17, 0xFFB79A72);
+            spike(out, pose, rock, 0.48, 0.98, 0xFF8E765B);
+            orb(out, pose, rock.add(0, -0.08, 0), 0.22, 0xFFD9BD91, 7, 10);
         }
     }
 
@@ -639,14 +642,26 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float rise = ease(clamp((t - 0.05F) / 0.52F));
-        for (int i = 0; i < 8; i++) {
-            double a = Math.PI * 2.0 * i / 8.0;
-            Vec3 base = point(fx, Math.cos(a) * 0.95, 0, 3.2 + Math.sin(a) * 0.95);
-            spike(out, pose, base.add(0, 1.25 * rise, 0), 0.31, 1.5 * rise, 0xFF887052);
-            if (i % 2 == 0) box(out, pose, base.add(0, 1.35 * rise, 0), 0.28, 0.26, 0.28, 0xFFB89A70);
+        float rise = ease(clamp((t - 0.05F) / 0.46F));
+        double radius = 1.62;
+        double centerForward = 3.35;
+        List<Vec3> crown = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            double a = Math.PI * 2.0 * i / 10.0;
+            double side = Math.cos(a) * radius;
+            double forward = centerForward + Math.sin(a) * radius;
+            Vec3 base = point(fx, side, 0, forward);
+            spike(out, pose, base.add(0, 1.75 * rise, 0), 0.38, 2.05 * rise, 0xFF887052);
+            if ((i & 1) == 0) {
+                box(out, pose, base.add(0, 1.30 * rise, 0), 0.34, 0.30, 0.34, 0xFFB89A70);
+            }
+            crown.add(point(fx, side, 2.05 * rise, forward));
         }
-        ring(out, pose, fx, 3.2, 1.05, 0xFFD5B88B, 42, t);
+        for (int i = 0; i < crown.size(); i++) {
+            ribbon(out, pose, List.of(crown.get(i), crown.get((i + 1) % crown.size())),
+                    0.075, 0xFFD5B88B);
+        }
+        groundRing(fx, pose, out, centerForward, radius + 0.18, 0.04, 0xFFB99A70, 56);
     }
 
     /**
