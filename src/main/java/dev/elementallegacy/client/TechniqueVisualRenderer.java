@@ -610,8 +610,8 @@ public final class TechniqueVisualRenderer {
 
                 double ground = terrainOffset(fx, side, forward);
                 double variation = Math.sin(column * 1.31 + row * 0.77) * 0.035;
-                double width = (0.58 + variation) * formed;
-                double height = (0.65 + Math.cos(column * 0.83 + row) * 0.025) * formed;
+                double width = (0.64 + variation) * formed;
+                double height = (0.69 + Math.cos(column * 0.83 + row) * 0.008) * formed;
                 double depth = 0.78 * formed;
                 double centerY = ground + (row + 0.5) * courseHeight * formed;
                 int shade = Math.floorMod(column + row * 2, 4);
