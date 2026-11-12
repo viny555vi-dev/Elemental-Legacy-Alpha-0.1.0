@@ -199,11 +199,8 @@ public final class TechniqueVisualRenderer {
     }
 
     private static CameraType smokeCameraFor(String abilityId) {
-        return switch (abilityId) {
-            case "flame_projectile", "fire_dragon", "water_projectile", "rock_throw", "air_blast" ->
-                    CameraType.THIRD_PERSON_FRONT;
-            default -> CameraType.THIRD_PERSON_BACK;
-        };
+        // Keep the caster visible while effects travel forward into the scene.
+        return CameraType.THIRD_PERSON_BACK;
     }
 
     private static void render(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
