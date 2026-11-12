@@ -80,6 +80,7 @@ public final class TechniqueVisualRenderer {
     private static boolean smokeStarted;
     private static int smokeNextTick;
     private static int smokeIndex;
+    private static String pendingSmokeAbility;
     private static boolean smokeFinishedLogged;
     private static boolean submitLogged;
 
@@ -161,6 +162,7 @@ public final class TechniqueVisualRenderer {
             SMOKE_MESHES_SUBMITTED.clear();
             PlayerAbilityAnimator.resetSmokeEvidence();
             smokeIndex = 0;
+            pendingSmokeAbility = null;
             smokeFinishedLogged = false;
             submitLogged = false;
             smokeNextTick = mc.player.tickCount + 80;
@@ -174,11 +176,34 @@ public final class TechniqueVisualRenderer {
         }
         if (mc.player.tickCount < smokeNextTick) return;
 
-        String ability = SMOKE_ABILITIES[smokeIndex++];
+        if (pendingSmokeAbility == null) {
+            pendingSmokeAbility = SMOKE_ABILITIES[smokeIndex];
+            CameraType cameraType = smokeCameraFor(pendingSmokeAbility);
+            if (mc.options.getCameraType() != cameraType) {
+                mc.options.setCameraType(cameraType);
+            }
+            System.out.println("[ELEMENTAL_VFX_SMOKE] CAMERA " + cameraType.name()
+                    + " for " + pendingSmokeAbility);
+            smokeNextTick = mc.player.tickCount + 4;
+            return;
+        }
+        if (mc.player.tickCount < smokeNextTick) return;
+
+        String ability = pendingSmokeAbility;
+        pendingSmokeAbility = null;
+        smokeIndex++;
         start(mc.player.getId(), ability);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
         smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
+    }
+
+    private static CameraType smokeCameraFor(String abilityId) {
+        return switch (abilityId) {
+            case "flame_projectile", "fire_dragon", "water_projectile", "rock_throw", "air_blast" ->
+                    CameraType.THIRD_PERSON_FRONT;
+            default -> CameraType.THIRD_PERSON_BACK;
+        };
     }
 
     private static void render(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -225,17 +250,24 @@ public final class TechniqueVisualRenderer {
 
     private static void projectile(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                    int outer, int core, double radius) {
-        float travel = ease(clamp((t - 0.12F) / 0.58F));
-        double z = 0.6 + travel * 7.2;
-        double bob = Math.sin(t * Math.PI * 8.0) * 0.12;
-        ribbon(out, pose, List.of(
-                point(fx, 0, 0, 0.25),
-                point(fx, 0.05, 0.12, z - 0.9),
-                point(fx, -0.06, -0.06, z - 0.35)
-        ), radius * 0.52, outer);
-        orb(out, pose, point(fx, 0, bob, z), radius, outer, 8, 14);
-        orb(out, pose, point(fx, 0, bob, z), radius * 0.48, core, 7, 12);
-        ring(out, pose, fx, z - 0.1, radius * 1.35, core, 28, t * 2.0);
+        // Keep the projectile inside the four-block third-person camera envelope.
+        // A larger layered core, thick outer sheath and paired rings make it readable
+        // against the world instead of disappearing as a tiny point far beyond the player.
+        float travel = ease(clamp((t - 0.08F) / 0.72F));
+        double z = 0.55 + travel * 2.35;
+        double bob = Math.sin(t * Math.PI * 6.0) * 0.10;
+        List<Vec3> trail = List.of(
+                point(fx, 0, 0.02, 0.22),
+                point(fx, 0.08, 0.12, z - 0.68),
+                point(fx, -0.06, -0.05, z - 0.18)
+        );
+        ribbon(out, pose, trail, radius * 0.86, outer);
+        ribbon(out, pose, trail, radius * 0.34, core);
+        Vec3 center = point(fx, 0, bob, z);
+        orb(out, pose, center, radius * 1.42, outer, 10, 18);
+        orb(out, pose, center, radius * 0.72, core, 8, 16);
+        ring(out, pose, fx, z - 0.08, radius * 2.00, core, 36, t * 2.8);
+        ring(out, pose, fx, z - 0.10, radius * 2.25, outer, 32, -t * 2.1);
     }
 
     private static void coneBurst(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
@@ -360,25 +392,45 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void dragon(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float reach = ease(clamp((t - 0.12F) / 0.56F));
-        for (int strand = 0; strand < 3; strand++) {
+        float reach = ease(clamp((t - 0.06F) / 0.55F));
+        double length = 3.05 * reach;
+
+        // Four overlapping, sinuous body ribbons create a readable serpentine silhouette.
+        for (int strand = 0; strand < 4; strand++) {
             List<Vec3> path = new ArrayList<>();
-            int count = Math.max(2, (int) (34 * Math.max(0.08, reach)));
-            for (int i = 0; i <= count; i++) {
-                double u = i / 34.0;
-                double wave = Math.sin(u * Math.PI * 5.2 - t * 6.0);
-                double side = wave * (0.56 + strand * 0.09);
-                double up = 0.82 + Math.sin(u * Math.PI * 2.1 - t * 4.0) * 0.36 + Math.sin(u * Math.PI) * 0.34;
-                double z = 0.35 + u * 8.0 * reach;
+            for (int i = 0; i <= 36; i++) {
+                double u = i / 36.0;
+                double wave = Math.sin(u * Math.PI * 5.2 - t * 5.0);
+                double side = wave * (0.34 + strand * 0.07);
+                double up = 0.72 + Math.sin(u * Math.PI * 2.1 - t * 3.8) * 0.22
+                        + Math.sin(u * Math.PI) * 0.25;
+                double z = 0.30 + u * length;
                 path.add(point(fx, side, up, z));
             }
-            ribbon(out, pose, path, strand == 0 ? 0.25 : 0.12, strand == 2 ? 0xFFFFE79A : 0xFFFF6428);
+            int color = strand == 3 ? 0xFFFFE7A1 : (strand == 0 ? 0xFFFF6428 : 0xFFFF8A32);
+            ribbon(out, pose, path, strand == 0 ? 0.25 : 0.13, color);
         }
-        if (reach > 0.12F) {
-            Vec3 head = point(fx, Math.sin(t * 6.0) * 0.56, 0.82 + Math.sin(t * 4.0) * 0.36, 0.35 + reach * 8.0);
-            orb(out, pose, head, 0.42, 0xFFFF8B31, 8, 14);
-            orb(out, pose, head, 0.18, 0xFFFFE9A6, 7, 12);
-            spike(out, pose, head.add(fx.forward().scale(0.32)), 0.2, 0.35, 0xFFFFD16A);
+
+        if (reach > 0.10F) {
+            Vec3 head = point(fx, Math.sin(t * 5.5) * 0.18,
+                    0.72 + Math.sin(t * 3.8) * 0.22, 0.30 + length);
+            orb(out, pose, head, 0.50, 0xFFFF7A2D, 10, 18);
+            orb(out, pose, head, 0.26, 0xFFFFE9A6, 8, 16);
+
+            for (int sideSign : new int[]{-1, 1}) {
+                Vec3 horn = head.add(fx.right().scale(sideSign * 0.22)).add(0.0, 0.18, 0.0);
+                spike(out, pose, horn, 0.11, 0.25, 0xFFFFD16A);
+                Vec3 eye = head.add(fx.right().scale(sideSign * 0.24)).add(0.0, 0.07, 0.12);
+                orb(out, pose, eye, 0.045, 0xFFFFF5C7, 5, 8);
+
+                List<Vec3> wing = List.of(
+                        point(fx, sideSign * 0.14, 0.92, 0.82),
+                        point(fx, sideSign * 0.58, 1.18, 1.22),
+                        point(fx, sideSign * 0.92, 0.82, 1.62),
+                        point(fx, sideSign * 0.30, 0.64, 1.34)
+                );
+                ribbon(out, pose, wing, 0.10, 0xFFFFB347);
+            }
         }
     }
 
@@ -508,12 +560,19 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockProjectiles(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp((t - 0.12F) / 0.58F));
+        float travel = ease(clamp((t - 0.08F) / 0.62F));
         for (int i = 0; i < 3; i++) {
-            double z = 0.8 + travel * 6.0 + i * 0.5;
-            Vec3 rock = point(fx, (i - 1) * 0.42, 0.25 + Math.sin(t * 12 + i) * 0.12, z);
-            spike(out, pose, rock, 0.34, 0.62, 0xFF8E765B);
-            orb(out, pose, rock.add(0, -0.1, 0), 0.13, 0xFFD9BD91, 5, 8);
+            double z = 0.65 + travel * 2.10 + i * 0.28;
+            double side = (i - 1) * 0.46 + Math.sin(t * 8.0 + i) * 0.08;
+            Vec3 rock = point(fx, side, 0.22 + Math.sin(t * 11.0 + i) * 0.10, z);
+            List<Vec3> trail = List.of(
+                    point(fx, side * 0.78, 0.16, z - 0.48),
+                    point(fx, side, 0.20, z - 0.18),
+                    rock
+            );
+            ribbon(out, pose, trail, 0.13, 0xFFB79A72);
+            spike(out, pose, rock, 0.43, 0.82, 0xFF8E765B);
+            orb(out, pose, rock.add(0, -0.08, 0), 0.18, 0xFFD9BD91, 7, 10);
         }
     }
 

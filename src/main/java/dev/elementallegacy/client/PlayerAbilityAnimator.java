@@ -225,6 +225,7 @@ public final class PlayerAbilityAnimator {
                     + " atMs=" + System.currentTimeMillis()
                     + " armDelta=" + armDelta + " torsoDelta=" + torsoDelta + " stanceDelta=" + stanceDelta
                     + " torsoSignature=" + torsoSignature
+                    + " camera=" + minecraft.options.getCameraType().name()
                     + " rightArmX=" + current.rightArmX() + " leftArmX=" + current.leftArmX()
                     + " rightArmY=" + current.rightArmY() + " leftArmY=" + current.leftArmY()
                     + " rightArmZ=" + current.rightArmZ() + " leftArmZ=" + current.leftArmZ()
