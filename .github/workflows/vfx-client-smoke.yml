@@ -158,30 +158,49 @@ jobs:
               raise SystemExit("Missing video capture start timestamp.")
           capture_start_ms = int(start_path.read_text().strip())
           log_text = log_path.read_text(errors="replace")
-          pattern = re.compile(r"PLAYER_MODEL_POSED ([a-z0-9_]+).*?atMs=(\d+).*?camera=([A-Z_]+)")
-          entries = []
-          seen = set()
+          pattern = re.compile(
+              r"PLAYER_MODEL_POSE_SAMPLE ([a-z0-9_]+) sample=(\d+)/5 progress=([0-9.]+) "
+              r"atMs=(\d+).*?camera=([A-Z_]+)"
+          )
+          ability_order = []
+          samples_by_ability = {}
           for line in log_text.splitlines():
               match = pattern.search(line)
-              if match:
-                  ability = match.group(1)
-                  if ability not in seen:
-                      entries.append((ability, int(match.group(2)), match.group(3)))
-                      seen.add(ability)
+              if not match:
+                  continue
+              ability, sample_text, progress_text, timestamp_text, camera = match.groups()
+              if ability not in samples_by_ability:
+                  ability_order.append(ability)
+                  samples_by_ability[ability] = {}
+              sample_index = int(sample_text)
+              samples_by_ability[ability][sample_index] = (
+                  int(timestamp_text), float(progress_text), camera
+              )
 
-          if len(entries) != 24:
-              raise SystemExit(f"Expected 24 timestamped rendered poses; found {len(entries)}.")
+          if len(ability_order) != 24:
+              raise SystemExit(
+                  f"Expected pose timelines for 24 techniques; found {len(ability_order)}."
+              )
+          incomplete = {
+              ability: sorted(set(range(1, 6)) - set(samples))
+              for ability, samples in samples_by_ability.items()
+              if set(samples) != set(range(1, 6))
+          }
+          if incomplete:
+              raise SystemExit(f"Missing full-animation pose samples: {incomplete}")
 
-          manifest = ["index\tability\tcamera\tsample_index\toffset_seconds\tvideo_time_seconds\tpose_timestamp_ms"]
-          # Sample inside the active pose window, not after the 1.9s animation has faded.
-          sample_offsets = [0.00, 0.15, 0.30, 0.45, 0.60]
+          manifest = [
+              "index\tability\tcamera\tsample_index\tprogress\tvideo_time_seconds\tpose_timestamp_ms"
+          ]
           screenshot_count = 0
-          for index, (ability, pose_ms, camera) in enumerate(entries, 1):
-              base_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
-              if base_time < 0:
-                  raise SystemExit(f"Invalid video offset for {ability}: {base_time:.3f}s")
-              for sample_index, offset in enumerate(sample_offsets, 1):
-                  video_time = base_time + offset
+          for index, ability in enumerate(ability_order, 1):
+              for sample_index in range(1, 6):
+                  pose_ms, progress, camera = samples_by_ability[ability][sample_index]
+                  video_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
+                  if video_time < 0:
+                      raise SystemExit(
+                          f"Invalid video offset for {ability} sample {sample_index}: {video_time:.3f}s"
+                      )
                   image_path = output_dir / f"{index:02d}_{ability}_{sample_index:02d}.png"
                   subprocess.run([
                       "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
@@ -192,7 +211,8 @@ jobs:
                       raise SystemExit(f"Screenshot {sample_index}/5 was not created for {ability}.")
                   screenshot_count += 1
                   manifest.append(
-                      f"{index:02d}\t{ability}\t{camera}\t{sample_index}\t{offset:.2f}\t{video_time:.3f}\t{pose_ms}"
+                      f"{index:02d}\t{ability}\t{camera}\t{sample_index}\t{progress:.3f}\t"
+                      f"{video_time:.3f}\t{pose_ms}"
                   )
           (output_dir / "manifest.tsv").write_text("\n".join(manifest) + "\n")
           contact_sheet = output_dir / "timeline-contact.jpg"
