@@ -800,210 +800,235 @@ public final class TechniqueVisualRenderer {
 
     private static void airBlast(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float travel = ease(clamp((t - 0.025F) / 0.72F));
-        double depth = 0.42 + travel * 6.25;
+        double depth = 0.85 + travel * 5.85;
         double pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 8.0);
-        Vec3 core = point(fx, Math.sin(t * 8.5) * 0.055, 0.12, depth);
+        double launchSide = 0.70 + Math.sin(t * 8.5) * 0.075;
+        double launchUp = 0.23 + Math.sin(t * 6.0) * 0.08;
+        Vec3 core = point(fx, launchSide, launchUp, depth);
 
-        // Dense compressed-air nucleus, surrounded by a translucent pressure lens.
-        orb(out, pose, core, 0.27 + pulse * 0.045, 0xA86EF4E7, 8, 18);
-        orb(out, pose, core, 0.135 + pulse * 0.025, 0xDDF4FFFF, 7, 16);
-        for (int layer = 0; layer < 5; layer++) {
-            double radius = 0.20 + layer * 0.105 + pulse * 0.035;
-            ring(out, pose, fx, depth - 0.62 + layer * 0.20, radius,
-                    layer % 2 == 0 ? 0xD9D8FFF8 : 0x9A63E5D5, 40, -t * 5.0 + layer * 0.55);
+        // The compressed core is offset from the player's silhouette, like a hand-launched pressure orb.
+        orb(out, pose, core, 0.43 + pulse * 0.055, 0xD86FE5D7, 10, 22);
+        orb(out, pose, core, 0.235 + pulse * 0.035, 0xF8F6FFFF, 9, 20);
+
+        // Six pressure shells wrap the nucleus and remain visible as it travels.
+        for (int layer = 0; layer < 6; layer++) {
+            double ringDepth = depth - 0.66 + layer * 0.17;
+            double radius = 0.28 + layer * 0.075 + pulse * 0.045;
+            ringOffset(out, pose, fx, launchSide, launchUp, ringDepth, radius,
+                    layer % 2 == 0 ? 0xE8E8FFFC : 0xC77AE9DB, 48, -t * 5.0 + layer * 0.48,
+                    0.105);
         }
 
-        // Six helical shear streams make the projectile read as moving air, not a colored ball.
-        for (int strand = 0; strand < 6; strand++) {
+        // Eight broad helical shear ribbons form a visible, rotating projectile envelope.
+        for (int strand = 0; strand < 8; strand++) {
             List<Vec3> stream = new ArrayList<>();
-            for (int i = 0; i <= 22; i++) {
-                double u = i / 22.0;
-                double angle = u * Math.PI * 2.6 + strand * Math.PI / 3.0 - t * 9.0;
-                double radius = 0.22 + 0.09 * Math.sin(u * Math.PI);
+            for (int i = 0; i <= 30; i++) {
+                double u = i / 30.0;
+                double angle = u * Math.PI * 2.8 + strand * Math.PI / 4.0 - t * 9.0;
+                double radius = 0.29 + 0.12 * Math.sin(u * Math.PI);
                 stream.add(point(fx,
-                        Math.cos(angle) * radius,
-                        0.12 + Math.sin(angle) * radius,
-                        depth - 1.12 + u * 1.50));
+                        launchSide + Math.cos(angle) * radius,
+                        launchUp + Math.sin(angle) * radius,
+                        depth - 1.30 + u * 1.78));
             }
-            ribbon(out, pose, stream, strand == 0 ? 0.085 : 0.052,
-                    strand % 2 == 0 ? 0xE8DFFFFF : 0xB96DE9DC);
+            ribbon(out, pose, stream, strand == 0 ? 0.17 : 0.115,
+                    strand % 2 == 0 ? 0xF0E9FFFF : 0xD17AE9DD);
         }
 
-        // Trailing pressure rings travel behind the core and expand as they lose energy.
-        for (int i = 0; i < 4; i++) {
-            double ringDepth = depth - 0.95 - i * 0.44;
-            double radius = 0.28 + i * 0.11 + travel * 0.10;
-            ring(out, pose, fx, ringDepth, radius, 0x8EC8FFF5, 36, t * 3.2 + i);
+        // Broad trailing shock rings leave a clear wake instead of disappearing behind the caster.
+        for (int i = 0; i < 5; i++) {
+            double ringDepth = depth - 1.05 - i * 0.43;
+            double radius = 0.34 + i * 0.13 + travel * 0.12;
+            ringOffset(out, pose, fx, launchSide, launchUp, ringDepth, radius,
+                    0xBFD5FFF7, 44, t * 3.2 + i, 0.085);
         }
     }
 
     private static void airPush(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float expand = ease(clamp((t - 0.035F) / 0.70F));
-        double radius = 0.35 + expand * 4.0;
+        double radius = 0.45 + expand * 4.10;
 
-        // Ground-hugging pressure front follows slopes instead of floating as a flat ring.
+        // A thick, ground-conforming pressure front visibly sweeps across uneven terrain.
         for (int layer = 0; layer < 3; layer++) {
-            groundRing(fx, pose, out, 0.08, radius * (0.72 + layer * 0.15),
-                    0.04 + layer * 0.075,
-                    layer == 1 ? 0xD8E8FFFC : 0x9B70E5D7, 72);
+            groundRingWide(fx, pose, out, 0.08, radius * (0.68 + layer * 0.16),
+                    0.045 + layer * 0.085,
+                    layer == 1 ? 0xE3F5FFFF : 0xC879E6DB, 80, 0.13 - layer * 0.015);
         }
-        ringAt(out, pose, fx, -0.42, radius * 0.72, 0x9878F2E4, 56, true, t * 3.0);
-        ringAt(out, pose, fx, 0.06, radius * 0.88, 0xBFEAFFFF, 56, true, -t * 2.2);
+        ringAtWide(out, pose, fx, -0.42, radius * 0.72, 0xB879F2E4, 64, true, t * 3.0, 0.10);
+        ringAtWide(out, pose, fx, 0.06, radius * 0.88, 0xDDEFFFFFFF, 64, true, -t * 2.2, 0.095);
 
-        // Twelve pressure vanes radiate from the caster, with an upward curl at the edge.
+        // Twelve wide pressure vanes fan outward and curl upward at their leading edge.
         for (int ray = 0; ray < 12; ray++) {
             double angle = Math.PI * 2.0 * ray / 12.0;
             List<Vec3> vane = new ArrayList<>();
-            for (int i = 0; i <= 12; i++) {
-                double u = i / 12.0;
+            for (int i = 0; i <= 18; i++) {
+                double u = i / 18.0;
                 double r = 0.18 + u * radius;
-                double curl = Math.sin(u * Math.PI) * (0.16 + expand * 0.16);
+                double curl = Math.sin(u * Math.PI) * (0.20 + expand * 0.22);
                 vane.add(point(fx, Math.cos(angle) * r,
                         -0.58 + curl + Math.sin(angle) * r * 0.05,
                         Math.sin(angle) * r));
             }
-            ribbon(out, pose, vane, 0.045, ray % 3 == 0 ? 0xDFFFFFFF : 0x9675E9DC);
+            ribbon(out, pose, vane, ray % 3 == 0 ? 0.13 : 0.095,
+                    ray % 3 == 0 ? 0xE9FFFFFF : 0xC77BE9DC);
         }
-        orb(out, pose, point(fx, 0, -0.18, 0.42), 0.24 + expand * 0.12, 0x887DFFF0, 7, 16);
+
+        // A lifted pressure lens marks the caster as the origin of the expanding burst.
+        orb(out, pose, point(fx, 0, -0.12, 0.42), 0.32 + expand * 0.16, 0xA87DFFF0, 8, 18);
     }
 
     private static void airShield(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        // A spherical wind shell: crossing latitude and longitude bands create a true 3D barrier.
-        for (int strand = 0; strand < 8; strand++) {
+        // A true 3D wind shell around the player, layered with thick crossing currents.
+        for (int strand = 0; strand < 10; strand++) {
             List<Vec3> helix = new ArrayList<>();
-            for (int i = 0; i <= 40; i++) {
-                double u = i / 40.0;
-                double angle = u * Math.PI * 2.0 + strand * Math.PI / 4.0 + t * 3.2;
+            for (int i = 0; i <= 48; i++) {
+                double u = i / 48.0;
+                double angle = u * Math.PI * 2.0 + strand * Math.PI / 5.0 + t * 3.2;
                 double latitude = -0.98 + u * 1.96;
-                double radius = 1.02 + 0.12 * Math.sin(u * Math.PI * 3.0 + t * 4.0 + strand);
+                double radius = 1.02 + 0.15 * Math.sin(u * Math.PI * 3.0 + t * 4.0 + strand);
                 helix.add(point(fx,
                         Math.cos(angle) * radius * Math.cos(latitude),
-                        Math.sin(latitude) * 1.18,
+                        Math.sin(latitude) * 1.22,
                         Math.sin(angle) * radius * Math.cos(latitude)));
             }
-            ribbon(out, pose, helix, strand % 2 == 0 ? 0.075 : 0.052,
-                    strand % 2 == 0 ? 0xCFB9FFF3 : 0xA66BE4D5);
+            ribbon(out, pose, helix, strand % 2 == 0 ? 0.145 : 0.105,
+                    strand % 2 == 0 ? 0xE2D4FFF7 : 0xC777E6D8);
         }
-        for (int band = 0; band < 5; band++) {
-            double y = -0.84 + band * 0.42;
-            double r = 1.08 * Math.sqrt(Math.max(0.12, 1.0 - y * y / 1.55));
-            ringAt(out, pose, fx, y, r, band == 2 ? 0xE6E8FFFF : 0xA5A2F8EB,
-                    56, true, t * (band % 2 == 0 ? 1.7 : -1.7));
+        for (int band = 0; band < 6; band++) {
+            double y = -0.98 + band * 0.39;
+            double r = 1.12 * Math.sqrt(Math.max(0.10, 1.0 - y * y / 1.60));
+            ringAtWide(out, pose, fx, y, r,
+                    band == 2 || band == 3 ? 0xF0F1FFFF : 0xC5A9F8EC,
+                    64, true, t * (band % 2 == 0 ? 1.8 : -1.8), 0.105);
         }
-        // Two broad vertical pressure arcs protect the front and back of the player.
-        ring(out, pose, fx, 0.05, 1.12, 0xBDEBFFFA, 64, t * 0.8);
-        ring(out, pose, fx, 0.05, 0.86, 0x8E76E3D3, 64, -t * 1.2);
+
+        // Two thick vertical pressure hoops rotate at different speeds around the shell.
+        ringWide(out, pose, fx, 0.05, 1.16, 0xD6EEFFFA, 72, t * 0.8, 0.11);
+        ringWide(out, pose, fx, 0.05, 0.88, 0xB981E7D8, 72, -t * 1.2, 0.085);
+
+        // Broad shoulder-height currents sweep around the front and rear of the user.
+        for (int lane = 0; lane < 4; lane++) {
+            List<Vec3> sweep = new ArrayList<>();
+            for (int i = 0; i <= 32; i++) {
+                double u = i / 32.0;
+                double angle = u * Math.PI * 2.0 - t * 4.5 + lane * Math.PI / 2.0;
+                sweep.add(point(fx, Math.cos(angle) * (0.92 + lane * 0.025),
+                        -0.12 + lane * 0.18 + Math.sin(u * Math.PI * 2.0 + t * 3.0) * 0.10,
+                        Math.sin(angle) * (0.92 + lane * 0.025)));
+            }
+            ribbon(out, pose, sweep, 0.105, 0xBDEBFFFA);
+        }
     }
 
     private static void airJump(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float lift = ease(clamp((t - 0.035F) / 0.56F));
-        ringAt(out, pose, fx, -0.78, 0.52 + lift * 0.55, 0xD7E8FFFC, 56, true, t * 3.5);
-        ringAt(out, pose, fx, -0.66, 0.92 + lift * 0.38, 0x8F70E5D7, 56, true, -t * 2.4);
+        ringAtWide(out, pose, fx, -0.78, 0.58 + lift * 0.65, 0xE2F3FFFC, 64, true, t * 3.5, 0.11);
+        ringAtWide(out, pose, fx, -0.66, 1.02 + lift * 0.48, 0xC17BE7D8, 64, true, -t * 2.4, 0.09);
 
-        // Seven rising corkscrews form a visible air column under the launching body.
-        for (int strand = 0; strand < 7; strand++) {
+        // Nine broad rising corkscrews create a powerful lift column beneath the body.
+        for (int strand = 0; strand < 9; strand++) {
             List<Vec3> column = new ArrayList<>();
-            for (int n = 0; n <= 30; n++) {
-                double u = n / 30.0;
-                double angle = u * Math.PI * 3.5 + strand * Math.PI * 2.0 / 7.0 - t * 5.8;
-                double radius = 0.24 + u * 0.66 + 0.09 * Math.sin(u * Math.PI * 4.0 + t * 7.0);
+            for (int n = 0; n <= 40; n++) {
+                double u = n / 40.0;
+                double angle = u * Math.PI * 3.8 + strand * Math.PI * 2.0 / 9.0 - t * 5.8;
+                double radius = 0.28 + u * 0.80 + 0.10 * Math.sin(u * Math.PI * 4.0 + t * 7.0);
                 column.add(point(fx,
                         Math.cos(angle) * radius,
-                        -0.72 + u * (2.55 + lift * 1.25),
+                        -0.72 + u * (2.75 + lift * 1.45),
                         Math.sin(angle) * radius));
             }
-            ribbon(out, pose, column, strand == 0 ? 0.095 : 0.055,
-                    strand % 2 == 0 ? 0xD8F2FFFC : 0x9A6BE5D8);
+            ribbon(out, pose, column, strand == 0 ? 0.17 : 0.105,
+                    strand % 2 == 0 ? 0xE7F9FFFC : 0xC477E6DA);
         }
-        for (int i = 0; i < 4; i++) {
-            double u = i / 3.0;
-            ringAt(out, pose, fx, -0.45 + u * (1.45 + lift * 1.8),
-                    0.38 + u * 0.55, 0x9CD7FFF5, 44, true, t * 4.0 + i);
+        for (int i = 0; i < 5; i++) {
+            double u = i / 4.0;
+            ringAtWide(out, pose, fx, -0.45 + u * (1.45 + lift * 1.8),
+                    0.42 + u * 0.62, 0xB6E6FFF5, 52, true, t * 4.0 + i, 0.085);
         }
-        orb(out, pose, point(fx, 0, 1.12 + lift * 0.35, 0), 0.26, 0xA8E9FFF6, 7, 16);
+        orb(out, pose, point(fx, 0, 1.12 + lift * 0.35, 0), 0.34, 0xD5E9FFF6, 9, 20);
     }
 
     private static void airDash(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                 int outer, int inner) {
         float dash = ease(clamp((t - 0.035F) / 0.17F))
                 * (1.0F - ease(clamp((t - 0.68F) / 0.27F)));
-        double length = 0.45 + dash * 7.0;
+        double length = 0.55 + dash * 7.6;
 
-        // Nine long shearing streamlines converge at the shoulders and peel away behind the caster.
+        // Nine thick streamlines stretch behind a streamlined, low-profile flying body.
         for (int lane = -4; lane <= 4; lane++) {
             List<Vec3> trail = new ArrayList<>();
-            for (int i = 0; i <= 28; i++) {
-                double u = i / 28.0;
+            for (int i = 0; i <= 34; i++) {
+                double u = i / 34.0;
                 double wave = Math.sin(u * Math.PI * 2.0 + t * 8.5 + lane * 0.42);
-                double side = lane * 0.13 * (0.4 + u) + wave * 0.11;
+                double side = lane * 0.14 * (0.4 + u) + wave * 0.11;
                 double up = -0.03 + Math.cos(u * Math.PI * 2.0 + t * 7.5) * 0.12;
                 trail.add(point(fx, side, up, 0.50 - u * length));
             }
-            ribbon(out, pose, trail, lane == 0 ? 0.16 : 0.075, outer);
-            if (lane == 0 || lane == -2 || lane == 2) ribbon(out, pose, trail, 0.035, inner);
+            ribbon(out, pose, trail, lane == 0 ? 0.22 : 0.125, outer);
+            if (lane == 0 || lane == -2 || lane == 2) ribbon(out, pose, trail, 0.055, inner);
         }
 
-        // Curved vanes wrap the torso and stretch into the wake.
+        // Six curved vanes wrap the torso and peel away into the wake like pressure wings.
         for (int sideSign : new int[]{-1, 1}) {
             for (int layer = 0; layer < 3; layer++) {
                 List<Vec3> vane = new ArrayList<>();
-                for (int i = 0; i <= 22; i++) {
-                    double u = i / 22.0;
+                for (int i = 0; i <= 26; i++) {
+                    double u = i / 26.0;
                     double angle = u * Math.PI * 1.15 + t * 7.0 + layer * 0.75;
                     vane.add(point(fx,
                             sideSign * (0.18 + Math.cos(angle) * (0.55 + layer * 0.22)),
                             -0.18 + Math.sin(angle) * (0.42 + layer * 0.13),
                             0.32 + u * (1.15 + dash * 1.8)));
                 }
-                ribbon(out, pose, vane, 0.055, inner);
+                ribbon(out, pose, vane, 0.095, inner);
             }
         }
-        ringAt(out, pose, fx, -0.12, 0.48 + dash * 0.80, 0xD1EFFFFA, 48, true, t * 7.0);
-        ringAt(out, pose, fx, 0.48, 0.28 + dash * 0.54, 0xA66FE6D9, 44, true, -t * 5.0);
+        ringAtWide(out, pose, fx, -0.12, 0.52 + dash * 0.92, 0xE0F5FFFA, 56, true, t * 7.0, 0.10);
+        ringAtWide(out, pose, fx, 0.48, 0.32 + dash * 0.62, 0xB678E6D9, 52, true, -t * 5.0, 0.085);
     }
 
     private static void cyclone(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float rise = ease(clamp((t - 0.025F) / 0.66F));
-        double baseRadius = 2.05 * rise;
-        double centerForward = 2.75;
+        double baseRadius = 2.18 * rise;
+        double centerForward = 2.85;
 
-        // A broad grounded funnel narrows upward, with a hollow eye and layered wind walls.
-        for (int strand = 0; strand < 8; strand++) {
+        // A broad, rising funnel with layered wind walls, a hollow core and visible rotating bands.
+        for (int strand = 0; strand < 10; strand++) {
             List<Vec3> spiral = new ArrayList<>();
-            for (int i = 0; i <= 72; i++) {
-                double u = i / 72.0;
-                double y = -0.92 + u * 5.15 * rise;
-                double radius = Math.max(0.18, 1.95 - u * 1.48) * rise
-                        + 0.055 * Math.sin(u * Math.PI * 8.0 + t * 8.0 + strand);
-                double angle = u * Math.PI * 7.0 + t * 7.0 + strand * Math.PI / 4.0;
+            for (int i = 0; i <= 84; i++) {
+                double u = i / 84.0;
+                double y = -0.92 + u * 5.25 * rise;
+                double radius = Math.max(0.20, 2.08 - u * 1.56) * rise
+                        + 0.075 * Math.sin(u * Math.PI * 8.0 + t * 8.0 + strand);
+                double angle = u * Math.PI * 7.5 + t * 7.0 + strand * Math.PI / 5.0;
                 spiral.add(point(fx, Math.cos(angle) * radius, y,
                         centerForward + Math.sin(angle) * radius));
             }
-            ribbon(out, pose, spiral, strand % 2 == 0 ? 0.105 : 0.067,
-                    strand % 2 == 0 ? 0xC6EFFFFA : 0x8C61D9CC);
+            ribbon(out, pose, spiral, strand % 2 == 0 ? 0.17 : 0.115,
+                    strand % 2 == 0 ? 0xE2F4FFFA : 0xBD72E2D5);
         }
-        for (int band = 0; band < 5; band++) {
-            double u = band / 4.0;
-            double y = -0.70 + u * 4.20 * rise;
-            double radius = (1.92 - u * 1.43) * rise;
-            ringAt(out, pose, fx, y, Math.max(0.18, radius),
-                    band == 0 ? 0xD7F7FFFC : 0x9273E6D9, 64, true, -t * 4.0 + band * 0.35);
+        for (int band = 0; band < 6; band++) {
+            double u = band / 5.0;
+            double y = -0.70 + u * 4.25 * rise;
+            double radius = (2.02 - u * 1.50) * rise;
+            ringAtWide(out, pose, fx, y, Math.max(0.20, radius),
+                    band == 0 ? 0xE7F7FFFC : 0xB979E8DB, 72, true, -t * 4.0 + band * 0.35, 0.095);
         }
-        groundRing(fx, pose, out, centerForward, Math.max(0.28, baseRadius),
-                0.045, 0xCDEFFFFA, 72);
+        groundRingWide(fx, pose, out, centerForward, Math.max(0.30, baseRadius),
+                0.055, 0xE2F2FFFC, 80, 0.13);
 
-        // Loose outer gusts spiral away from the funnel and disturb the surrounding air.
+        // Four large outer gusts spread the storm into the nearby space.
         for (int blade = 0; blade < 4; blade++) {
             List<Vec3> gust = new ArrayList<>();
-            for (int i = 0; i <= 24; i++) {
-                double u = i / 24.0;
+            for (int i = 0; i <= 30; i++) {
+                double u = i / 30.0;
                 double angle = u * Math.PI * 2.0 + t * 5.0 + blade * Math.PI / 2.0;
-                double r = 1.35 + u * 1.35;
+                double r = 1.45 + u * 1.48;
                 gust.add(point(fx, Math.cos(angle) * r,
-                        -0.52 + u * 2.7,
+                        -0.52 + u * 2.85,
                         centerForward + Math.sin(angle) * r));
             }
-            ribbon(out, pose, gust, 0.052, 0x8FD6FFF4);
+            ribbon(out, pose, gust, 0.105, 0xB8D8FFF4);
         }
     }
 
@@ -1027,6 +1052,55 @@ public final class TechniqueVisualRenderer {
             else path.add(point(fx, Math.cos(a) * radius, height + Math.sin(a) * radius, 0.8));
         }
         ribbon(out, pose, path, 0.04, color);
+    }
+
+
+    private static void ringOffset(VertexConsumer out, PoseStack.Pose pose, ActiveEffect fx,
+                                   double centerSide, double centerUp, double depth, double radius,
+                                   int color, int segments, double rotation, double width) {
+        List<Vec3> path = new ArrayList<>();
+        for (int i = 0; i <= segments; i++) {
+            double a = Math.PI * 2.0 * i / segments + rotation;
+            path.add(point(fx, centerSide + Math.cos(a) * radius,
+                    centerUp + Math.sin(a) * radius, depth));
+        }
+        ribbon(out, pose, path, width, color);
+    }
+
+    private static void ringWide(VertexConsumer out, PoseStack.Pose pose, ActiveEffect fx,
+                                 double depth, double radius, int color, int segments,
+                                 double rotation, double width) {
+        List<Vec3> path = new ArrayList<>();
+        for (int i = 0; i <= segments; i++) {
+            double a = Math.PI * 2.0 * i / segments + rotation;
+            path.add(point(fx, Math.cos(a) * radius, Math.sin(a) * radius, depth));
+        }
+        ribbon(out, pose, path, width, color);
+    }
+
+    private static void ringAtWide(VertexConsumer out, PoseStack.Pose pose, ActiveEffect fx,
+                                   double height, double radius, int color, int segments,
+                                   boolean vertical, double rotation, double width) {
+        List<Vec3> path = new ArrayList<>();
+        for (int i = 0; i <= segments; i++) {
+            double a = Math.PI * 2.0 * i / segments + rotation;
+            if (vertical) path.add(point(fx, Math.cos(a) * radius, height, Math.sin(a) * radius));
+            else path.add(point(fx, Math.cos(a) * radius, height + Math.sin(a) * radius, 0.8));
+        }
+        ribbon(out, pose, path, width, color);
+    }
+
+    private static void groundRingWide(ActiveEffect fx, PoseStack.Pose pose, VertexConsumer out,
+                                       double centerForward, double radius, double lift,
+                                       int color, int segments, double width) {
+        List<Vec3> path = new ArrayList<>();
+        for (int i = 0; i <= segments; i++) {
+            double angle = Math.PI * 2.0 * i / segments;
+            double side = Math.cos(angle) * radius;
+            double forward = centerForward + Math.sin(angle) * radius;
+            path.add(groundPoint(fx, side, lift, forward));
+        }
+        ribbon(out, pose, path, width, color);
     }
 
     private static void orb(VertexConsumer out, PoseStack.Pose pose, Vec3 center,
