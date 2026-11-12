@@ -33,6 +33,7 @@ public final class PlayerAbilityAnimator {
     private static final Map<String, String> SMOKE_TORSO_SIGNATURES = new HashMap<>();
     private static final Map<String, String> SMOKE_POSE_SIGNATURES = new HashMap<>();
     private static final Set<String> SMOKE_POSE_COLLISIONS_LOGGED = new HashSet<>();
+    private static final Map<String, Set<Integer>> SMOKE_POSE_SAMPLE_BUCKETS = new HashMap<>();
     private static PoseSnapshot SMOKE_NEUTRAL_POSE;
 
     private record ActiveAnimation(String abilityId, long startedAt) {}
@@ -55,6 +56,7 @@ public final class PlayerAbilityAnimator {
         SMOKE_TORSO_SIGNATURES.clear();
         SMOKE_POSE_SIGNATURES.clear();
         SMOKE_POSE_COLLISIONS_LOGGED.clear();
+        SMOKE_POSE_SAMPLE_BUCKETS.clear();
         SMOKE_NEUTRAL_POSE = null;
     }
 
@@ -161,11 +163,11 @@ public final class PlayerAbilityAnimator {
             }
             return;
         }
-        if (SMOKE_NEUTRAL_POSE == null || SMOKE_MODEL_POSES_VERIFIED.contains(active.abilityId())) return;
+        if (SMOKE_NEUTRAL_POSE == null) return;
 
-        // Compare after the wind-up, while the technique's full-body action is visible.
+        // Capture the complete animation arc, not five adjacent frames from its middle.
         float t = progress(state.id, state.partialTick);
-        if (t < 0.48F) return;
+        if (t < 0.0F) return;
 
         PoseSnapshot neutral = SMOKE_NEUTRAL_POSE;
         float armDelta = Math.max(
@@ -193,6 +195,27 @@ public final class PlayerAbilityAnimator {
                                 Math.abs(current.leftLegZ() - neutral.leftLegZ()))
                 )
         );
+
+        int sampleBucket = Math.min(4, (int) (t * 5.0F));
+        Set<Integer> capturedSamples = SMOKE_POSE_SAMPLE_BUCKETS.computeIfAbsent(
+                active.abilityId(), ignored -> new HashSet<>());
+        if (capturedSamples.add(sampleBucket)) {
+            System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_MODEL_POSE_SAMPLE " + active.abilityId()
+                    + " sample=" + (sampleBucket + 1) + "/5"
+                    + " progress=" + String.format(java.util.Locale.ROOT, "%.3f", t)
+                    + " atMs=" + System.currentTimeMillis()
+                    + " camera=" + minecraft.options.getCameraType().name()
+                    + " armDelta=" + armDelta + " torsoDelta=" + torsoDelta + " stanceDelta=" + stanceDelta
+                    + " rightArmX=" + current.rightArmX() + " leftArmX=" + current.leftArmX()
+                    + " rightArmY=" + current.rightArmY() + " leftArmY=" + current.leftArmY()
+                    + " rightArmZ=" + current.rightArmZ() + " leftArmZ=" + current.leftArmZ()
+                    + " bodyX=" + current.bodyX() + " bodyY=" + current.bodyY() + " bodyZ=" + current.bodyZ()
+                    + " rightLegX=" + current.rightLegX() + " leftLegX=" + current.leftLegX()
+                    + " rightLegZ=" + current.rightLegZ() + " leftLegZ=" + current.leftLegZ());
+        }
+
+        // Keep the stricter distinct-pose approval check after the wind-up.
+        if (SMOKE_MODEL_POSES_VERIFIED.contains(active.abilityId()) || t < 0.48F) return;
         if (armDelta <= 0.12F || torsoDelta <= 0.10F || stanceDelta <= 0.05F) return;
 
         // Quantized torso signatures prevent 24 log entries from passing with repeated trunk poses.
