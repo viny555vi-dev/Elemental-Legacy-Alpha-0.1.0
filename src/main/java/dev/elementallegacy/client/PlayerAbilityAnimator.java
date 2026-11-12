@@ -326,15 +326,6 @@ public final class PlayerAbilityAnimator {
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
-            case "air_dash" -> {
-                bodyTurn = 34.0F * (float) Math.sin(t * Math.PI * 2.0F) * pulse;
-                bodyLean = 4.0F * charge - 12.0F * release;
-                gait = 0.32F;
-                crouch = false;
-                swimmingPose = true;
-                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
-                offPose = HumanoidModel.ArmPose.BLOCK;
-            }
             case "fire_dragon" -> {
                 bodyTurn = 28.0F * pulse;
                 bodyLean = 11.0F * charge - 5.0F * release;

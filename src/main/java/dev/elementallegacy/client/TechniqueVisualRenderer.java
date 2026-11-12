@@ -364,39 +364,6 @@ public final class TechniqueVisualRenderer {
         ringAt(out, pose, fx, -0.82, 0.38 + thrust * 0.72, inner, 44, true, t * 2.6);
     }
 
-    private static void airDash(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
-                                int outer, int inner) {
-        float dash = ease(clamp((t - 0.05F) / 0.16F))
-                * (1.0F - ease(clamp((t - 0.64F) / 0.30F)));
-        double length = 0.35 + dash * 6.0;
-        for (int lane = -3; lane <= 3; lane++) {
-            List<Vec3> trail = new ArrayList<>();
-            for (int i = 0; i <= 24; i++) {
-                double u = i / 24.0;
-                double wave = Math.sin(u * Math.PI * 2.0 + t * 8.0 + lane * 0.4);
-                double side = lane * 0.15 + wave * 0.12;
-                double up = -0.05 + Math.cos(u * Math.PI * 2.0 + t * 7.0) * 0.10;
-                trail.add(point(fx, side, up, 0.45 - u * length));
-            }
-            ribbon(out, pose, trail, lane == 0 ? 0.14 : 0.075, outer);
-            if (lane == 0) ribbon(out, pose, trail, 0.04, inner);
-        }
-
-        for (int sideSign : new int[]{-1, 1}) {
-            List<Vec3> crescent = new ArrayList<>();
-            for (int i = 0; i <= 20; i++) {
-                double u = i / 20.0;
-                crescent.add(point(fx,
-                        sideSign * (1.8 - u * 1.45),
-                        0.12 + Math.sin(u * Math.PI) * 0.78,
-                        0.35 + u * 1.8 * dash));
-            }
-            ribbon(out, pose, crescent, 0.075, inner);
-        }
-        ringAt(out, pose, fx, -0.10, 0.42 + dash * 0.82, inner, 40, true, t * 7.0);
-        ringAt(out, pose, fx, 0.55, 0.24 + dash * 0.56, outer, 36, true, -t * 5.0);
-    }
-
     private static void dragon(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float reach = ease(clamp((t - 0.06F) / 0.55F));
         double length = 3.05 * reach;
