@@ -114,10 +114,92 @@ public final class ElementalAbilityService {
                 }
             }
             target.push(push.x, push.y, push.z);
+            if (a.element() == Element.GALE) galeMobImpact(level, a, target, look, horizontalAway);
             if(a.element()==Element.EMBER)target.igniteForSeconds(a==ElementalAbility.FIRE_DRAGON?6:3);
             if(a==ElementalAbility.ICE_BIND||a==ElementalAbility.ICE_BLADES)target.setDeltaMovement(target.getDeltaMovement().multiply(0.25,0.35,0.25));
         }
         return hits;
+    }
+
+    /**
+     * Technique-specific wind impacts on living targets. These are deliberately separate
+     * from the caster's mesh so mobs receive a readable visual reaction of their own.
+     */
+    private static void galeMobImpact(ServerLevel level, ElementalAbility ability,
+                                      LivingEntity target, Vec3 look, Vec3 away) {
+        Vec3 center = target.position().add(0.0, target.getBbHeight() * 0.55, 0.0);
+        Vec3 horizontal = new Vec3(away.x, 0.0, away.z);
+        if (horizontal.lengthSqr() < 0.0001) horizontal = new Vec3(look.x, 0.0, look.z);
+        if (horizontal.lengthSqr() < 0.0001) horizontal = new Vec3(1.0, 0.0, 0.0);
+        horizontal = horizontal.normalize();
+
+        switch (ability) {
+            case AIR_BLAST -> {
+                // Focused pressure strike: a bright frontal slash and a short-lived impact bloom.
+                emit(level, ParticleTypes.SWEEP_ATTACK, center, 7, 0.22, 0.20, 0.22, 0.12);
+                emit(level, ParticleTypes.CLOUD, center, 24, 0.34, 0.30, 0.34, 0.10);
+                mobWindRing(level, center, 0.62, 22, 0.10, ParticleTypes.CLOUD);
+            }
+            case AIR_PUSH -> {
+                // Radial repulsion: two horizontal pressure rings expand from the mob's body.
+                mobWindRing(level, center.add(0.0, -0.34, 0.0), 0.72, 28, 0.08, ParticleTypes.CLOUD);
+                mobWindRing(level, center.add(0.0, 0.34, 0.0), 0.92, 28, 0.07, ParticleTypes.SWEEP_ATTACK);
+                emit(level, ParticleTypes.POOF, center, 14, 0.38, 0.25, 0.38, 0.06);
+            }
+            case AIR_SHIELD -> {
+                // A defensive counter-current wraps the repelled target in intersecting arcs.
+                mobWindRing(level, center, 0.78, 24, 0.10, ParticleTypes.SWEEP_ATTACK);
+                for (int side : new int[]{-1, 1}) {
+                    Vec3 arc = center.add(horizontal.scale(side * 0.34));
+                    emit(level, ParticleTypes.CLOUD, arc, 12, 0.12, 0.36, 0.12, 0.08);
+                }
+                emit(level, ParticleTypes.POOF, center, 12, 0.32, 0.30, 0.32, 0.05);
+            }
+            case AIR_JUMP -> {
+                // A vertical launch column climbs around the target as it is lifted.
+                for (int step = 0; step < 6; step++) {
+                    Vec3 point = center.add(0.0, -0.65 + step * 0.28, 0.0)
+                            .add(horizontal.scale(0.18 + step * 0.045));
+                    emit(level, ParticleTypes.CLOUD, point, 5, 0.13, 0.16, 0.13, 0.10);
+                }
+                emit(level, ParticleTypes.SWEEP_ATTACK, center, 5, 0.18, 0.38, 0.18, 0.08);
+            }
+            case AIR_DASH -> {
+                // A high-speed cross-cut leaves several parallel wind slashes through the target.
+                Vec3 tangent = new Vec3(-horizontal.z, 0.0, horizontal.x);
+                for (int blade = -2; blade <= 2; blade++) {
+                    Vec3 point = center.add(tangent.scale(blade * 0.24));
+                    emit(level, ParticleTypes.SWEEP_ATTACK, point, 2, 0.06, 0.16, 0.06, 0.16);
+                    emit(level, ParticleTypes.CLOUD, point, 4, 0.10, 0.12, 0.10, 0.08);
+                }
+            }
+            case CYCLONE -> {
+                // Spiral lift around the body matches the cyclone's tangential knockback.
+                for (int step = 0; step < 18; step++) {
+                    double angle = step * Math.PI * 0.58;
+                    double radius = 0.28 + step * 0.035;
+                    Vec3 point = center.add(Math.cos(angle) * radius,
+                            -0.82 + step * 0.095,
+                            Math.sin(angle) * radius);
+                    emit(level, ParticleTypes.CLOUD, point, 4, 0.10, 0.13, 0.10, 0.065);
+                    if (step % 3 == 0) emit(level, ParticleTypes.SWEEP_ATTACK, point, 1, 0.02, 0.04, 0.02, 0.06);
+                }
+                emit(level, ParticleTypes.POOF, center, 12, 0.55, 0.28, 0.55, 0.05);
+            }
+            default -> {
+            }
+        }
+    }
+
+    private static void mobWindRing(ServerLevel level, Vec3 center, double radius,
+                                    int segments, double verticalJitter, ParticleOptions particle) {
+        for (int i = 0; i < segments; i++) {
+            double angle = Math.PI * 2.0 * i / segments;
+            Vec3 point = center.add(Math.cos(angle) * radius,
+                    Math.sin(angle * 2.0) * verticalJitter,
+                    Math.sin(angle) * radius);
+            emit(level, particle, point, 1, 0.015, 0.025, 0.015, 0.03);
+        }
     }
 
     // Keeps visual effects server-authoritative so every nearby player sees the same action.
