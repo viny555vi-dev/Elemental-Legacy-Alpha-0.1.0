@@ -193,6 +193,7 @@ public final class ElementalClient {
 
     @SubscribeEvent
     public static void renderHud(RenderGuiEvent.Post event) {
+        if (Boolean.getBoolean("elemental.vfx.smoke")) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || localElement.isBlank()) return;
 
