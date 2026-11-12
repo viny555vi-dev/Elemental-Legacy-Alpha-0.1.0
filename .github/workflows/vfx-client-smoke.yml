@@ -173,7 +173,8 @@ jobs:
               raise SystemExit(f"Expected 24 timestamped rendered poses; found {len(entries)}.")
 
           manifest = ["index\tability\tcamera\tsample_index\toffset_seconds\tvideo_time_seconds\tpose_timestamp_ms"]
-          sample_offsets = [0.20, 0.55, 0.90, 1.25, 1.60]
+          # Sample inside the active pose window, not after the 1.9s animation has faded.
+          sample_offsets = [0.00, 0.10, 0.20, 0.30, 0.40]
           screenshot_count = 0
           for index, (ability, pose_ms, camera) in enumerate(entries, 1):
               base_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
