@@ -587,58 +587,91 @@ public final class TechniqueVisualRenderer {
      * A broad rampart grown from the actual block surface: layered stone courses,
      * a raised foundation, buttresses, irregular merlons and visible fracture seams.
      */
+    /**
+     * A monumental masonry rampart assembled from staggered stone courses.
+     * Every block samples the local terrain height, so the foundation follows
+     * slopes instead of hovering above the world. Alternating joints, buttresses
+     * and crenellations give the wall a recognisable fortress silhouette.
+     */
     private static void stoneWall(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
         float build = ease(clamp(t / 0.20F));
         float retract = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
         float formed = build * retract;
-        double forward = 3.8;
+        final double forward = 3.8;
+        final double courseHeight = 0.69;
         List<Vec3> crownLine = new ArrayList<>();
         List<Vec3> foundation = new ArrayList<>();
 
-        for (int x = -6; x <= 6; x++) {
-            double side = x * 0.62;
-            double ground = terrainOffset(fx, side, forward);
-            double irregular = 4.15 + 0.25 * Math.sin(x * 1.7) + ((x % 3 == 0) ? 0.22 : 0.0);
-            double height = irregular * formed;
-            int tone = Math.floorMod(x, 3) == 0 ? 0xFF8D785D :
-                    (Math.floorMod(x, 3) == 1 ? 0xFF74614B : 0xFFA38A69);
+        for (int row = 0; row < 6; row++) {
+            double stagger = (row & 1) == 0 ? 0.0 : 0.31;
+            for (int column = -7; column <= 7; column++) {
+                double side = column * 0.62 + stagger;
+                if (Math.abs(side) > 4.45) continue;
 
-            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.50, forward),
-                    0.66, Math.max(0.03, height), 0.76, tone);
-            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.16, forward + 0.405),
-                    0.64, Math.max(0.035, height * 0.22), 0.045, 0xFFB39A72);
-            orientedBox(out, pose, fx, point(fx, side, ground + height * 0.84, forward + 0.405),
-                    0.64, Math.max(0.035, height * 0.12), 0.045, 0xFFBDA47D);
-
-            if (Math.floorMod(x, 3) == 0) {
-                orientedBox(out, pose, fx, point(fx, side, ground + height * 0.52, forward - 0.02),
-                        0.78, Math.max(0.04, height * 1.05), 0.92, 0xFF66533F);
-                orientedBox(out, pose, fx, point(fx, side, ground + height + 0.19 * formed, forward),
-                        0.48, 0.38 * formed, 0.82, 0xFFC2A57A);
-            }
-            if (Math.floorMod(x, 2) == 0) {
-                spike(out, pose, point(fx, side, ground + height - 0.28 * formed, forward),
-                        0.19, 0.72 * formed, 0xFFC8B28E);
-            }
-
-            crownLine.add(point(fx, side, ground + height, forward));
-            foundation.add(point(fx, side, ground + 0.08 * formed, forward + 0.46));
-        }
-
-        for (int course = 1; course <= 5; course++) {
-            List<Vec3> seam = new ArrayList<>();
-            for (int x = -6; x <= 6; x++) {
-                double side = x * 0.62;
                 double ground = terrainOffset(fx, side, forward);
-                double height = (4.15 + 0.25 * Math.sin(x * 1.7)) * formed;
-                seam.add(point(fx, side, ground + height * course / 6.0, forward + 0.395));
+                double variation = Math.sin(column * 1.31 + row * 0.77) * 0.035;
+                double width = (0.58 + variation) * formed;
+                double height = (0.65 + Math.cos(column * 0.83 + row) * 0.025) * formed;
+                double depth = 0.78 * formed;
+                double centerY = ground + (row + 0.5) * courseHeight * formed;
+                int shade = Math.floorMod(column + row * 2, 4);
+                int tone = switch (shade) {
+                    case 0 -> 0xFFE0E3E7;
+                    case 1 -> 0xFFC4CAD1;
+                    case 2 -> 0xFFADB5BE;
+                    default -> 0xFFD2D7DD;
+                };
+
+                // Each course is offset half a block, breaking up the old vertical-log appearance.
+                orientedBox(out, pose, fx, point(fx, side, centerY, forward),
+                        width, height, depth, tone);
+
+                // Slightly raised face-stone gives the rampart a layered, chipped masonry surface.
+                if ((column + row) % 3 == 0) {
+                    orientedBox(out, pose, fx,
+                            point(fx, side - 0.015, centerY + 0.035 * formed, forward + 0.405 * formed),
+                            width * 0.82, height * 0.72, 0.045 * formed, 0xFFE9ECEF);
+                }
+
+                // Taller merlons on alternating top blocks form a strong castle-wall silhouette.
+                if (row == 5 && (column & 1) == 0) {
+                    orientedBox(out, pose, fx,
+                            point(fx, side, ground + 4.43 * formed, forward),
+                            0.43 * formed, 0.48 * formed, 0.84 * formed, 0xFFBFC6CE);
+                }
+                if (row == 0) {
+                    foundation.add(point(fx, side, ground + 0.06 * formed, forward + 0.43 * formed));
+                }
+                if (row == 5) crownLine.add(point(fx, side, ground + 4.14 * formed, forward));
             }
-            ribbon(out, pose, seam, 0.025, 0xFF4D4033);
         }
 
-        ribbon(out, pose, crownLine, 0.055, 0xFFD7C09A);
-        ribbon(out, pose, foundation, 0.09, 0xFF5E4C39);
-        groundRing(fx, pose, out, forward, 4.25, 0.045, 0xFFB79B73, 56);
+        // Broad corner buttresses lock the wall visually into the terrain.
+        for (int sideSign : new int[]{-1, 1}) {
+            double side = sideSign * 3.95;
+            double ground = terrainOffset(fx, side, forward);
+            for (int course = 0; course < 4; course++) {
+                orientedBox(out, pose, fx,
+                        point(fx, side, ground + (course + 0.5) * 0.91 * formed, forward - 0.08 * formed),
+                        0.88 * formed, 0.86 * formed, 1.02 * formed,
+                        (course & 1) == 0 ? 0xFFB9C1C9 : 0xFFD4D9DE);
+            }
+        }
+
+        // Fine recessed mortar joints use a cool mineral shadow instead of the old brown tint.
+        for (int row = 1; row < 6; row++) {
+            List<Vec3> seam = new ArrayList<>();
+            for (int x = -14; x <= 14; x++) {
+                double side = x * 0.31;
+                double ground = terrainOffset(fx, side, forward);
+                seam.add(point(fx, side, ground + row * courseHeight * formed, forward + 0.405 * formed));
+            }
+            ribbon(out, pose, seam, 0.018 * formed, 0xFF626A73);
+        }
+
+        ribbon(out, pose, crownLine, 0.065 * formed, 0xFFE9ECEF);
+        ribbon(out, pose, foundation, 0.085 * formed, 0xFF777F88);
+        groundRing(fx, pose, out, forward, 4.35, 0.045, 0xFFB9C1C9, 56);
     }
 
     private static void rockCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
@@ -685,12 +718,12 @@ public final class TechniqueVisualRenderer {
                 double phase = t * 17.0 + row * 1.9 + col * 1.23;
                 double lift = (0.08 + Math.max(0.0, Math.sin(phase)) * (wide ? 0.72 : 0.46)) * wave * decay;
                 double tilt = 0.08 * Math.sin(phase * 0.65);
-                int rockColor = ((row + col) & 1) == 0 ? 0xFF8B7457 : 0xFF6F5B46;
+                int rockColor = ((row + col) & 1) == 0 ? 0xFFBFC6CD : 0xFF89939D;
                 orientedBox(out, pose, fx, point(fx, side, ground + 0.10 + lift, forward),
                         wide ? 0.92 : 0.72, 0.20 + lift * 0.42, wide ? 1.10 : 0.92, rockColor);
                 if ((row + col) % 4 == 0) {
                     spike(out, pose, point(fx, side + tilt, ground + 0.18 + lift, forward),
-                            wide ? 0.30 : 0.22, (wide ? 0.95 : 0.65) * wave * decay, 0xFFB69A70);
+                            wide ? 0.30 : 0.22, (wide ? 0.95 : 0.65) * wave * decay, 0xFFD1D7DD);
                 }
             }
         }
@@ -710,17 +743,17 @@ public final class TechniqueVisualRenderer {
                 line.add(crackPoint);
                 inner.add(crackPoint.add(0, 0.012, 0));
             }
-            ribbon(out, pose, line, wide ? 0.095 : 0.065, 0xFF3F3025);
-            ribbon(out, pose, inner, wide ? 0.027 : 0.020, 0xFFC39B64);
+            ribbon(out, pose, line, wide ? 0.095 : 0.065, 0xFF3D454E);
+            ribbon(out, pose, inner, wide ? 0.027 : 0.020, 0xFFE0E5EA);
         }
 
         groundRing(fx, pose, out, centerForward, 2.2 + reach * 0.32, 0.055,
-                0xFFE1C59B, 64);
+                0xFFD7DDE3, 64);
         if (wide) {
             groundRing(fx, pose, out, centerForward, 4.4 + reach * 0.40, 0.035,
-                    0xFF9A7855, 72);
+                    0xFF737D87, 72);
             groundRing(fx, pose, out, centerForward, 6.2 + reach * 0.18, 0.025,
-                    0xFFD2B48A, 72);
+                    0xFFBFC7CF, 72);
         }
     }
 
@@ -737,10 +770,10 @@ public final class TechniqueVisualRenderer {
         float form = ease(clamp(t / 0.13F));
         float sustain = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
         float armor = form * sustain;
-        int dark = 0xFF564331;
-        int mid = 0xFF927858;
-        int light = 0xFFC3A77C;
-        int edge = 0xFFE4D0A7;
+        int dark = 0xFF555D66;
+        int mid = 0xFF8D969F;
+        int light = 0xFFC1C8CF;
+        int edge = 0xFFE7EBEF;
 
         // Thin torso shell with separate chest/back plates and a waist guard.
         orientedBox(out, pose, fx, point(fx, 0, -0.01, 0.00),
@@ -782,7 +815,7 @@ public final class TechniqueVisualRenderer {
                 point(fx, 0, -0.02 * armor, 0.207 * armor),
                 point(fx, 0.17 * armor, 0.20 * armor, 0.204 * armor));
         ribbon(out, pose, chestSigil, 0.022 * armor, edge);
-        ringAt(out, pose, fx, -0.30, 0.62 * armor, 0xFFCAB18B, 40, true, t * 0.16);
+        ringAt(out, pose, fx, -0.30, 0.62 * armor, 0xFFD5DCE2, 40, true, t * 0.16);
     }
 
     
