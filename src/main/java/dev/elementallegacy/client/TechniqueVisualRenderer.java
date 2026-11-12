@@ -602,6 +602,17 @@ public final class TechniqueVisualRenderer {
         List<Vec3> crownLine = new ArrayList<>();
         List<Vec3> foundation = new ArrayList<>();
 
+        // Continuous load-bearing stone core behind the staggered facade.
+        // Slightly overlapping terrain-sampled panels close visual gaps while
+        // preserving local ground height on each section of the rampart.
+        for (int column = -7; column <= 7; column++) {
+            double side = column * 0.62;
+            double ground = terrainOffset(fx, side, forward);
+            orientedBox(out, pose, fx,
+                    point(fx, side, ground + 2.07 * formed, forward - 0.43 * formed),
+                    0.74 * formed, 4.14 * formed, 0.34 * formed, 0xFF9EA7B1);
+        }
+
         for (int row = 0; row < 6; row++) {
             double stagger = (row & 1) == 0 ? 0.0 : 0.31;
             for (int column = -7; column <= 7; column++) {
