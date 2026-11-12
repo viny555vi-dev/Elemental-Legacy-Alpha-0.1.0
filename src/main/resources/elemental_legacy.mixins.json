@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "minVersion": "0.8.7",
+  "package": "dev.elementallegacy.mixin.client",
+  "client": [
+    "PlayerModelAbilityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
