@@ -435,39 +435,53 @@ public final class PlayerAbilityAnimator {
                 offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "air_blast" -> {
-                bodyTurn = 18.0F * charge - 12.0F * release;
-                bodyLean = 4.0F * release;
+                bodyTurn = -27.0F * charge + 18.0F * release;
+                bodyLean = 12.0F * charge - 16.0F * release;
+                crouch = charge > 0.18F;
+                gait = 0.76F;
                 mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
                 offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "air_push" -> {
-                bodyTurn = 0.0F;
-                bodyLean = -9.0F * release;
-                gait = 0.82F;
+                bodyTurn = -12.0F * charge + 8.0F * release;
+                bodyLean = 19.0F * charge - 11.0F * release;
+                crouch = charge > 0.12F;
+                gait = 0.88F;
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "air_shield" -> {
-                bodyTurn = 17.0F * pulse;
-                bodyLean = 0.0F;
+                bodyTurn = 22.0F * pulse;
+                bodyLean = -6.0F * pulse;
                 crouch = false;
+                gait = 0.58F;
                 mainPose = HumanoidModel.ArmPose.BLOCK;
                 offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "air_jump" -> {
                 bodyTurn = 0.0F;
-                bodyLean = -18.0F * pulse;
+                bodyLean = 25.0F * charge - 31.0F * release;
                 crouch = false;
-                flyingPose = pulse > 0.18F;
-                gait = 0.90F;
+                flyingPose = t > 0.22F && t < 0.94F;
+                gait = 1.0F;
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
-            case "cyclone" -> {
-                bodyTurn = 36.0F * (float) Math.sin(t * Math.PI * 2.0F);
-                bodyLean = 9.0F * pulse;
+            case "air_dash" -> {
+                bodyTurn = 18.0F * (float) Math.sin(t * Math.PI * 2.0F) * pulse;
+                bodyLean = -29.0F * release - 7.0F * charge;
                 crouch = false;
-                gait = 0.88F;
+                flyingPose = t > 0.14F && t < 0.92F;
+                gait = 0.98F;
+                mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
+                offPose = HumanoidModel.ArmPose.BLOCK;
+            }
+            case "cyclone" -> {
+                bodyTurn = 72.0F * (float) Math.sin(t * Math.PI * 2.0F);
+                bodyLean = 7.0F * pulse;
+                crouch = false;
+                swimmingPose = true;
+                gait = 0.84F;
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
@@ -624,39 +638,40 @@ public final class PlayerAbilityAnimator {
                 legDrive = 30.0F * charge - 18.0F * release; legSpread = 17.0F;
             }
             case "air_blast" -> {
-                roll = -6.0F * release;
-                armPitch = 9.0F * release; armYaw = 7.0F * release;
-                armRoll = -6.0F * release; armSwing = 14.0F * release;
-                legDrive = 11.0F * release; legSpread = 6.0F;
+                roll = -10.0F * release;
+                armPitch = 22.0F * release; armYaw = 12.0F * release;
+                armRoll = -8.0F * release; armSwing = 26.0F * release;
+                legDrive = 18.0F * release; legSpread = 8.0F;
             }
             case "air_push" -> {
-                roll = -9.0F * release;
-                armPitch = -9.0F * release; armYaw = -11.0F * release;
-                armRoll = 8.0F * release;
-                legDrive = 20.0F * release; legSpread = 10.0F;
+                roll = -17.0F * release;
+                armPitch = -20.0F * release; armYaw = -14.0F * release;
+                armRoll = 16.0F * release; armSwing = 10.0F * release;
+                legDrive = 30.0F * release; legSpread = 18.0F;
             }
             case "air_shield" -> {
-                roll = -9.0F * pulse;
-                armPitch = -8.0F * pulse; armYaw = 15.0F * pulse;
-                armRoll = -11.0F * pulse;
-                legDrive = 9.0F * pulse; legSpread = 12.0F;
+                roll = 13.0F * sweep;
+                armPitch = -4.0F * pulse; armYaw = 26.0F * pulse;
+                armRoll = 18.0F * pulse;
+                legDrive = 10.0F * pulse; legSpread = 16.0F;
             }
             case "air_jump" -> {
-                armPitch = -18.0F * pulse; armYaw = 8.0F * pulse;
-                armRoll = 6.0F * pulse;
-                legDrive = -20.0F * pulse; legSpread = 14.0F;
+                roll = -8.0F * pulse;
+                armPitch = -20.0F * pulse; armYaw = 13.0F * pulse;
+                armRoll = 12.0F * pulse;
+                legDrive = -28.0F * pulse; legSpread = 19.0F;
             }
             case "air_dash" -> {
-                roll = 12.0F * sweep;
-                armPitch = 10.0F * pulse; armYaw = 10.0F * pulse;
-                armRoll = 18.0F * sweep; armSwing = 18.0F * sweep;
-                legDrive = 12.0F * pulse; legSpread = 11.0F;
+                roll = 18.0F * sweep;
+                armPitch = 18.0F * pulse; armYaw = 12.0F * pulse;
+                armRoll = 23.0F * sweep; armSwing = 24.0F * sweep;
+                legDrive = 20.0F * pulse; legSpread = 15.0F;
             }
             case "cyclone" -> {
-                roll = 18.0F * sweep;
-                armPitch = -6.0F * pulse; armYaw = -8.0F * pulse;
-                armRoll = 24.0F * sweep; armSwing = 12.0F * sweep;
-                legDrive = 16.0F * pulse; legSpread = 15.0F;
+                roll = 28.0F * sweep;
+                armPitch = -14.0F * pulse; armYaw = -12.0F * pulse;
+                armRoll = 32.0F * sweep; armSwing = 24.0F * sweep;
+                legDrive = 22.0F * pulse; legSpread = 20.0F;
             }
             default -> {
                 roll = 8.0F * pulse;

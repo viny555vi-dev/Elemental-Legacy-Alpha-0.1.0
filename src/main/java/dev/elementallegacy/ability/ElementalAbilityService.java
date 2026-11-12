@@ -79,7 +79,7 @@ public final class ElementalAbilityService {
             if(distance>a.range()||distance<0.01)continue;
             double alignment=look.dot(offset.normalize());
             boolean radial=switch(a){
-                case AIR_PUSH,AIR_SHIELD,WATER_SHIELD,STONE_ARMOR,FOCUSED_EXPLOSION,EARTHQUAKE,CYCLONE -> true;
+                case AIR_PUSH,AIR_SHIELD,AIR_JUMP,WATER_SHIELD,STONE_ARMOR,FOCUSED_EXPLOSION,EARTHQUAKE,CYCLONE -> true;
                 default -> false;
             };
             if(!radial&&alignment<0.48)continue;
@@ -88,10 +88,32 @@ public final class ElementalAbilityService {
             if(a==ElementalAbility.WATER_SHIELD||a==ElementalAbility.AIR_SHIELD||a==ElementalAbility.STONE_ARMOR)damage=8;
             if(!target.hurtServer(level,player.damageSources().playerAttack(player),damage))continue;
             hits++;
-            Vec3 push=look.scale(a.element()==Element.GALE?1.25:0.62);
-            if(a==ElementalAbility.CYCLONE||a==ElementalAbility.AIR_JUMP)push=push.add(0,0.72,0);
-            if(radial)push=target.position().subtract(player.position()).normalize().scale(0.9).add(0,0.35,0);
-            target.push(push.x,push.y,push.z);
+            Vec3 away = target.position().subtract(player.position());
+            Vec3 horizontalAway = new Vec3(away.x, 0.0, away.z);
+            if (horizontalAway.lengthSqr() < 0.0001) horizontalAway = new Vec3(look.x, 0.0, look.z);
+            if (horizontalAway.lengthSqr() < 0.0001) horizontalAway = new Vec3(1.0, 0.0, 0.0);
+            horizontalAway = horizontalAway.normalize();
+
+            Vec3 push;
+            switch (a) {
+                case AIR_BLAST -> push = look.scale(1.95).add(0.0, 0.34, 0.0);
+                case AIR_PUSH -> push = horizontalAway.scale(1.34).add(0.0, 0.62, 0.0);
+                case AIR_SHIELD -> push = horizontalAway.scale(1.12).add(0.0, 0.48, 0.0);
+                case AIR_JUMP -> push = horizontalAway.scale(0.78).add(0.0, 1.05, 0.0);
+                case AIR_DASH -> push = look.scale(1.72).add(0.0, 0.68, 0.0);
+                case CYCLONE -> {
+                    Vec3 tangent = new Vec3(-horizontalAway.z, 0.0, horizontalAway.x);
+                    double intensity = Math.max(0.35, 1.0 - Math.min(away.length(), 6.5) / 8.0);
+                    push = tangent.scale(1.08 * intensity)
+                            .add(horizontalAway.scale(-0.24))
+                            .add(0.0, 0.62 + 0.38 * intensity, 0.0);
+                }
+                default -> {
+                    push = look.scale(a.element() == Element.GALE ? 1.25 : 0.62);
+                    if (radial) push = horizontalAway.scale(0.9).add(0.0, 0.35, 0.0);
+                }
+            }
+            target.push(push.x, push.y, push.z);
             if(a.element()==Element.EMBER)target.igniteForSeconds(a==ElementalAbility.FIRE_DRAGON?6:3);
             if(a==ElementalAbility.ICE_BIND||a==ElementalAbility.ICE_BLADES)target.setDeltaMovement(target.getDeltaMovement().multiply(0.25,0.35,0.25));
         }
@@ -117,6 +139,9 @@ public final class ElementalAbilityService {
         cues.add(new ScheduledCue(3,()->{
             ring(level,a.element(),hands,0.62,28);
             emitElement(level,a.element(),origin.add(0,-0.45,0),16,0.42,0.12,0.42,0.025);
+            if (a == ElementalAbility.AIR_PUSH) airDebris(level, player.position(), 3.5, 34, 0.24);
+            if (a == ElementalAbility.AIR_JUMP) airDebris(level, player.position(), 1.9, 28, 0.62);
+            if (a == ElementalAbility.AIR_SHIELD) airDebris(level, player.position(), 1.55, 22, 0.28);
         }));
         // Terrain formations rise in nine timed stages instead of appearing as one instant block.
         for (int structureStep = 0; structureStep < 9; structureStep++) {
@@ -195,6 +220,10 @@ public final class ElementalAbilityService {
                 Vec3 point=origin.subtract(forward.scale(0.25+t*2.35)).add(0,-0.55+t*0.24,0);
                 emitElement(level,ability.element(),point,20,0.3,0.28,0.3,0.045);
                 ring(level,ability.element(),point,0.55+t*0.22,28);
+                if (ability == ElementalAbility.AIR_DASH && segment % 3 == 0)
+                    airDebris(level, point, 1.35, 15, 0.22);
+                if (ability == ElementalAbility.AIR_JUMP && segment == 1)
+                    airDebris(level, origin, 1.5, 24, 0.6);
             }
             case "water_shield","air_shield","stone_armor" -> {
                 double angle=t*Math.PI*2.0D;
@@ -219,11 +248,12 @@ public final class ElementalAbilityService {
             }
             case "cyclone" -> {
                 double angle=t*Math.PI*5.0D;
-                double radius=0.32+t*1.35;
+                double radius=1.85-t*1.25;
                 Vec3 center=origin.add(forward.scale(3.0));
-                Vec3 point=center.add(Math.cos(angle)*radius,-1.1+t*3.2,Math.sin(angle)*radius);
-                emit(level,ParticleTypes.CLOUD,point,16,0.22,0.24,0.22,0.045);
-                emitElement(level,Element.GALE,point,8,0.14,0.16,0.14,0.03);
+                Vec3 point=center.add(Math.cos(angle)*radius,-1.1+t*4.1,Math.sin(angle)*radius);
+                emit(level,ParticleTypes.CLOUD,point,18,0.24,0.28,0.24,0.055);
+                emitElement(level,Element.GALE,point,10,0.16,0.18,0.16,0.04);
+                if (segment % 3 == 0) airDebris(level, center.add(0,-0.65,0), 2.25, 18, 0.72);
             }
             default -> {
                 Vec3 point=start.add(forward.scale(t*5.0));
@@ -306,7 +336,11 @@ public final class ElementalAbilityService {
             case EMBER -> {emit(l,ParticleTypes.FLAME,p,42,0.72,0.62,0.72,0.12);emit(l,ParticleTypes.LAVA,p,8,0.35,0.3,0.35,0.04);emit(l,ParticleTypes.LARGE_SMOKE,p,15,0.45,0.3,0.45,0.035);}
             case TIDE -> {emit(l,ParticleTypes.SPLASH,p,48,0.85,0.65,0.85,0.16);emit(l,ParticleTypes.BUBBLE,p,22,0.5,0.4,0.5,0.06);}
             case STONE -> {emit(l,ParticleTypes.POOF,p,38,0.8,0.25,0.8,0.11);emit(l,ParticleTypes.CRIT,p,24,0.7,0.45,0.7,0.14);}
-            case GALE -> {emit(l,ParticleTypes.CLOUD,p,42,0.8,0.65,0.8,0.12);emit(l,ParticleTypes.POOF,p,20,0.55,0.4,0.55,0.07);}
+            case GALE -> {
+                emit(l,ParticleTypes.CLOUD,p,42,0.8,0.65,0.8,0.12);
+                emit(l,ParticleTypes.POOF,p,20,0.55,0.4,0.55,0.07);
+                if (a == ElementalAbility.AIR_BLAST) airDebris(l,p,1.35,26,0.28);
+            }
         }
     }
 
@@ -320,6 +354,27 @@ public final class ElementalAbilityService {
             emitElement(l,e,p,2,0.035,0.035,0.035,0.008);
         }
     }
+    private static void airDebris(ServerLevel level, Vec3 center, double radius, int count, double lift) {
+        for (int i = 0; i < count; i++) {
+            double angle = Math.PI * 2.0 * i / count;
+            double distance = radius * Math.sqrt((i + 0.5) / count);
+            double x = center.x + Math.cos(angle) * distance;
+            double z = center.z + Math.sin(angle) * distance;
+            double y = center.y - 0.28 + ((i % 5) * 0.035);
+            Vec3 particle = new Vec3(x, y, z);
+
+            BlockPos ground = BlockPos.containing(x, y, z);
+            if (level.getBlockState(ground).isAir()) ground = ground.below();
+            if (level.getBlockState(ground).isAir()) ground = ground.below();
+            BlockState groundState = level.getBlockState(ground);
+            if (!groundState.isAir()) {
+                emit(level, new BlockParticleOption(ParticleTypes.BLOCK, groundState),
+                        particle, 2, 0.10, lift, 0.10, 0.075);
+            }
+            emit(level, ParticleTypes.CLOUD, particle, 2, 0.12, lift * 0.55, 0.12, 0.045);
+        }
+    }
+
     private static void debris(ServerLevel l,Vec3 p,Element e,int count){
         BlockPos pos=BlockPos.containing(p.x,p.y-0.2,p.z);
         BlockState state=l.getBlockState(pos);
