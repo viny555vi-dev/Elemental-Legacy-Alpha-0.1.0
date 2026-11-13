@@ -88,6 +88,10 @@ public final class TechniqueVisualRenderer {
 
     private TechniqueVisualRenderer() {}
 
+    private static boolean isWaterTechnique(String abilityId) {
+        return abilityId.startsWith("water_") || abilityId.startsWith("ice_") || abilityId.equals("great_wave");
+    }
+
     public static void start(int entityId, String abilityId) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
@@ -99,8 +103,14 @@ public final class TechniqueVisualRenderer {
         if (right.lengthSqr() < 0.0001) right = new Vec3(1.0, 0.0, 0.0);
         else right = right.normalize();
         Vec3 origin = entity.position().add(0.0, Math.max(0.8, entity.getBbHeight() * 0.62), 0.0);
-        float waterAffinity=WaterAffinity.forAbility(entity,abilityId);
-        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(), durationTicksFor(abilityId),waterAffinity));
+        float waterAffinity = WaterAffinity.forAbility(entity, abilityId);
+        if (Boolean.getBoolean("elemental.vfx.smoke") && isWaterTechnique(abilityId)) {
+            System.out.printf(java.util.Locale.ROOT,
+                    "[ELEMENTAL_VFX_SMOKE] WATER_AFFINITY %s value=%.3f swimming=%s underwater=%s inWater=%s%n",
+                    abilityId, waterAffinity, entity.isSwimming(), entity.isUnderWater(), entity.isInWater());
+        }
+        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(),
+                durationTicksFor(abilityId), waterAffinity));
     }
 
     @SubscribeEvent
@@ -205,7 +215,11 @@ public final class TechniqueVisualRenderer {
         String ability = pendingSmokeAbility;
         pendingSmokeAbility = null;
         smokeIndex++;
+        boolean originalSwimming = mc.player.isSwimming();
+        boolean swimmingScenario = isWaterTechnique(ability) && !"water_projectile".equals(ability);
+        if (swimmingScenario) mc.player.setSwimming(true);
         start(mc.player.getId(), ability);
+        mc.player.setSwimming(originalSwimming);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
         smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
