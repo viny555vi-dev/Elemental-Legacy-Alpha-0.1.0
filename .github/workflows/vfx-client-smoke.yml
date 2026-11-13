@@ -312,11 +312,21 @@ jobs:
             fi
             for ability in water_whip ice_bind ice_blades water_shield great_wave; do
               if ! grep -q "WATER_AFFINITY $ability value=1.900 swimming=true" "$RUNNER_TEMP/client.log"; then
-                echo "Swimming affinity was not validated for $ability."
+                echo "Swimming mesh affinity was not validated for $ability."
                 exit 27
               fi
+              if ! grep -q "PLAYER_ANIMATION_WATER_AFFINITY $ability value=1.900 swimming=true" "$RUNNER_TEMP/client.log"; then
+                echo "Swimming pose affinity was not validated for $ability."
+                exit 28
+              fi
             done
-            echo "Water affinity validated: near-water=$NEAR_WATER_VALUE; swimming=1.900 for all five remaining Tide meshes."
+            NEAR_WATER_POSE=$(grep -m1 "PLAYER_ANIMATION_WATER_AFFINITY water_projectile " "$RUNNER_TEMP/client.log" || true)
+            NEAR_WATER_POSE_VALUE=$(echo "$NEAR_WATER_POSE" | sed -E 's/.* value=([0-9.]+).*/\1/')
+            if [ -z "$NEAR_WATER_POSE_VALUE" ] || ! awk -v value="$NEAR_WATER_POSE_VALUE" 'BEGIN { exit !(value > 1.10) }'; then
+              echo "Water proximity affinity was not applied to the player pose: $NEAR_WATER_POSE"
+              exit 29
+            fi
+            echo "Water affinity validated: near-water mesh/pose=$NEAR_WATER_VALUE/$NEAR_WATER_POSE_VALUE; swimming=1.900 for all five remaining Tide meshes and poses."
 
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
