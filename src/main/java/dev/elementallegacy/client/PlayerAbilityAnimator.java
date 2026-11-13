@@ -389,49 +389,49 @@ public final class PlayerAbilityAnimator {
                 offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
             case "rock_throw" -> {
-                bodyTurn = -26.0F * charge + 16.0F * release;
-                bodyLean = 9.0F * charge - 5.0F * release;
-                gait = 0.74F;
+                bodyTurn = -34.0F * charge + 22.0F * release;
+                bodyLean = 13.0F * charge - 8.0F * release;
+                gait = 0.86F;
                 mainPose = HumanoidModel.ArmPose.THROW_TRIDENT;
                 offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "stone_wall" -> {
-                bodyTurn = 0.0F;
-                bodyLean = 18.0F * charge - 8.0F * release;
-                crouch = charge > 0.15F;
-                gait = 0.68F;
+                bodyTurn = -4.0F * pulse;
+                bodyLean = 24.0F * charge - 13.0F * release;
+                crouch = charge > 0.10F;
+                gait = 0.82F;
                 mainPose = HumanoidModel.ArmPose.TOOT_HORN;
                 offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "rock_cage" -> {
-                bodyTurn = 12.0F * pulse;
-                bodyLean = -8.0F * pulse;
+                bodyTurn = 17.0F * pulse;
+                bodyLean = -13.0F * pulse;
                 crouch = false;
-                gait = 0.65F;
+                gait = 0.78F;
                 mainPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
-                offPose = HumanoidModel.ArmPose.BOW_AND_ARROW;
+                offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "seismic_wave" -> {
-                bodyTurn = -7.0F * pulse;
-                bodyLean = 21.0F * charge - 20.0F * release;
-                crouch = charge > 0.08F;
-                gait = 0.92F;
+                bodyTurn = -10.0F * pulse;
+                bodyLean = 28.0F * charge - 25.0F * release;
+                crouch = charge > 0.05F;
+                gait = 1.0F;
                 mainPose = HumanoidModel.ArmPose.TOOT_HORN;
                 offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
             case "stone_armor" -> {
-                bodyTurn = 7.0F * pulse;
-                bodyLean = 6.0F * pulse;
+                bodyTurn = 9.0F * pulse;
+                bodyLean = 8.0F * pulse;
                 crouch = false;
-                gait = 0.52F;
+                gait = 0.62F;
                 mainPose = HumanoidModel.ArmPose.BLOCK;
                 offPose = HumanoidModel.ArmPose.BLOCK;
             }
             case "earthquake" -> {
-                bodyTurn = 4.0F * (float) Math.sin(t * Math.PI * 4.0F);
-                bodyLean = 24.0F * charge - 27.0F * release;
-                crouch = charge > 0.05F;
-                gait = 1.0F;
+                bodyTurn = 6.0F * (float) Math.sin(t * Math.PI * 4.0F);
+                bodyLean = 31.0F * charge - 34.0F * release;
+                crouch = charge > 0.03F;
+                gait = 1.08F;
                 mainPose = HumanoidModel.ArmPose.TOOT_HORN;
                 offPose = HumanoidModel.ArmPose.TOOT_HORN;
             }
@@ -608,40 +608,44 @@ public final class PlayerAbilityAnimator {
                 legDrive = 28.0F * charge - 15.0F * release; legSpread = 17.0F;
             }
             case "rock_throw" -> {
-                roll = 11.0F * release;
-                armPitch = 12.0F * release; armYaw = -11.0F * release;
-                armRoll = 12.0F * release; armSwing = 18.0F * release;
-                legDrive = 20.0F * charge - 8.0F * release; legSpread = 12.0F;
+                roll = 15.0F * charge - 10.0F * release;
+                armPitch = 18.0F * charge - 12.0F * release;
+                armYaw = -15.0F * charge; armRoll = 16.0F * release;
+                armSwing = 28.0F * release;
+                legDrive = 25.0F * charge - 12.0F * release; legSpread = 16.0F;
             }
             case "stone_wall" -> {
-                armPitch = -10.0F * charge; armRoll = 7.0F * charge;
-                legDrive = 24.0F * charge - 7.0F * release; legSpread = 14.0F;
+                roll = 6.0F * charge;
+                armPitch = -18.0F * charge + 8.0F * release;
+                armYaw = 8.0F * charge; armRoll = 14.0F * charge;
+                armSwing = 10.0F * release;
+                legDrive = 32.0F * charge - 12.0F * release; legSpread = 20.0F;
             }
             case "rock_cage" -> {
-                roll = 8.0F * pulse;
-                armPitch = -6.0F * pulse; armYaw = 8.0F * pulse;
-                armRoll = -8.0F * pulse;
-                legDrive = 11.0F * pulse; legSpread = 11.0F;
+                roll = 12.0F * pulse;
+                armPitch = -15.0F * pulse; armYaw = 14.0F * pulse;
+                armRoll = 18.0F * pulse; armSwing = 18.0F * pulse;
+                legDrive = 18.0F * pulse; legSpread = 18.0F;
             }
             case "seismic_wave" -> {
-                roll = -8.0F * release;
-                armPitch = -14.0F * charge + 11.0F * release;
-                armYaw = -7.0F * charge; armRoll = 10.0F * release;
-                armSwing = 6.0F * release;
-                legDrive = 27.0F * charge - 16.0F * release; legSpread = 16.0F;
+                roll = -12.0F * release;
+                armPitch = -24.0F * charge + 16.0F * release;
+                armYaw = -10.0F * charge; armRoll = 16.0F * release;
+                armSwing = 12.0F * release;
+                legDrive = 34.0F * charge - 22.0F * release; legSpread = 20.0F;
             }
             case "stone_armor" -> {
-                roll = 6.0F * pulse;
-                armPitch = -4.0F * pulse; armYaw = 4.0F * pulse;
-                armRoll = 6.0F * pulse;
-                legDrive = 6.0F * pulse; legSpread = 7.0F;
+                roll = 8.0F * pulse;
+                armPitch = -12.0F * pulse; armYaw = 8.0F * pulse;
+                armRoll = 10.0F * pulse; armSwing = 4.0F * pulse;
+                legDrive = 8.0F * pulse; legSpread = 12.0F;
             }
             case "earthquake" -> {
-                roll = 10.0F * impact;
-                armPitch = -20.0F * charge + 16.0F * release;
-                armYaw = 4.0F * impact; armRoll = 14.0F * impact;
-                armSwing = 8.0F * impact;
-                legDrive = 30.0F * charge - 18.0F * release; legSpread = 17.0F;
+                roll = 14.0F * impact;
+                armPitch = -30.0F * charge + 22.0F * release;
+                armYaw = 8.0F * impact; armRoll = 20.0F * impact;
+                armSwing = 14.0F * impact;
+                legDrive = 38.0F * charge - 26.0F * release; legSpread = 22.0F;
             }
             case "air_blast" -> {
                 roll = -10.0F * release;

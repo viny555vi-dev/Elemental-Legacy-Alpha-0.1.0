@@ -18,6 +18,7 @@ import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import java.util.*;
@@ -28,7 +29,7 @@ public final class ElementalAbilityService {
     private static final Map<UUID,Integer> LAST_USE_TICK=new HashMap<>();
     private static final Map<UUID,List<TemporaryBlock>> TEMPORARY_BLOCKS=new HashMap<>();
     private record ScheduledCue(int tick,Runnable action){}
-    private record TemporaryBlock(ServerLevel level,BlockPos pos,BlockState original,BlockState placed,long restoreGameTime){}
+    private record TemporaryBlock(ServerLevel level,BlockPos pos,BlockState original,BlockState placed,long restoreGameTime,String abilityId){}
     private ElementalAbilityService(){}
 
     public static String use(ServerPlayer player, ElementalAbility ability){
@@ -55,6 +56,10 @@ public final class ElementalAbilityService {
         int hits=applyCombat(level,player,ability,origin,look,waterAffinity);
         AbilityAnimationPayload.broadcast(player, ability);
         scheduleTechnique(player,level,ability,origin,look,waterAffinity);
+        if (Boolean.getBoolean("elemental.vfx.smoke") && ability.element() == Element.STONE) {
+            System.out.println("[ELEMENTAL_STONE_SMOKE] ABILITY_START " + ability.id()
+                    + " atMs=" + System.currentTimeMillis());
+        }
         if(hits>0){
             data.addXp(player.getUUID(),ability.xpReward()*hits);
             return ability.displayName()+" executada! Alvos atingidos: "+hits+". +"+(ability.xpReward()*hits)+" XP.";
@@ -320,6 +325,12 @@ public final class ElementalAbilityService {
             emitElement(level,a.element(),hands,32,0.34,0.36,0.34,0.045);
             emit(level,ParticleTypes.ENCHANT,hands,8,0.22,0.22,0.22,0.07);
             if(a.element()==Element.TIDE)waterSourceSurge(level,player,hands,waterAffinity);
+            if (a == ElementalAbility.ROCK_THROW) {
+                for (int launch = -1; launch <= 1; launch++) {
+                    stoneGroundBurst(level, player.position().add(look.scale(0.92))
+                            .add(rightBasis.scale(launch * 0.78)), 22);
+                }
+            }
         }));
         cues.add(new ScheduledCue(3,()->{
             ring(level,a.element(),hands,0.62,28);
@@ -368,11 +379,17 @@ public final class ElementalAbilityService {
         double t=segment/9.0D;
         Vec3 start=origin.add(forward.scale(0.45)).add(0,-0.28,0);
         switch(ability.id()){
-            case "flame_projectile","water_projectile","air_blast","rock_throw" -> {
+            case "flame_projectile","water_projectile","air_blast" -> {
                 Vec3 point=start.add(forward.scale(0.35+ t*6.2));
                 emitElement(level,ability.element(),point,22,0.22,0.22,0.22,0.045);
                 emit(level,ParticleTypes.CRIT,point,6,0.15,0.15,0.15,0.035);
                 emitElement(level,ability.element(),point.subtract(forward.scale(0.35)),10,0.14,0.14,0.14,0.018);
+            }
+            case "rock_throw" -> {
+                Vec3 point=start.add(forward.scale(0.35+ t*6.2));
+                emitElement(level,Element.STONE,point,26,0.25,0.24,0.25,0.055);
+                emit(level,ParticleTypes.CRIT,point,8,0.18,0.16,0.18,0.045);
+                if (segment % 2 == 1) stoneGroundBurst(level, point, 12);
             }
             case "flame_burst","fire_dragon","great_wave","seismic_wave","earthquake" -> {
                 double distance=0.55+t*5.8;
@@ -586,60 +603,106 @@ public final class ElementalAbilityService {
         Integer last=LAST_USE_TICK.get(p.getUUID());
         return last!=null&&p.tickCount-last<30;
     }
+    private static BlockPos surfaceBlock(ServerLevel level, Vec3 point) {
+        BlockPos column = BlockPos.containing(point.x, 0.0D, point.z);
+        int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                column.getX(), column.getZ());
+        return new BlockPos(column.getX(), surfaceY, column.getZ());
+    }
+
+    /** Emits real block-textured fragments from the terrain under a Stone technique. */
+    private static void stoneGroundBurst(ServerLevel level, Vec3 point, int count) {
+        BlockPos surface = surfaceBlock(level, point);
+        if (!level.hasChunkAt(surface)) return;
+        BlockState ground = level.getBlockState(surface.below());
+        if (ground.isAir()) return;
+        ParticleOptions fragments = new BlockParticleOption(ParticleTypes.BLOCK, ground);
+        Vec3 origin = new Vec3(surface.getX() + 0.5D, surface.getY() + 0.06D, surface.getZ() + 0.5D);
+        emit(level, fragments, origin, count, 0.34, 0.12, 0.34, 0.16);
+        if (Boolean.getBoolean("elemental.vfx.smoke")) {
+            System.out.println("[ELEMENTAL_STONE_SMOKE] GROUND_DEBRIS ability=rock_throw count="
+                    + count + " pos=" + surface);
+        }
+    }
+
+    /**
+     * Temporary Stone structures are built only into air above solid terrain.
+     * Existing blocks, containers and protected terrain are never replaced.
+     */
     private static void placeEnvironmentalStructure(ServerPlayer player, ServerLevel level,
                                                     ElementalAbility ability, Vec3 origin,
                                                     Vec3 look, Vec3 right, int stage) {
-        int baseY=player.blockPosition().getY();
-        Vec3 center=player.position().add(look.scale(3.2));
-        List<BlockPos> positions=new ArrayList<>();
-        BlockState material=null;
-        int lifetime=60;
-        switch(ability){
+        Vec3 center = player.position().add(look.scale(3.2));
+        List<BlockPos> positions = new ArrayList<>();
+        BlockState material;
+        int lifetime = 60;
+
+        switch (ability) {
             case STONE_WALL -> {
-                material=Blocks.STONE.defaultBlockState();
-                Vec3 wall=player.position().add(look.scale(3.0));
-                for (int y = 0; y < 3; y++) {
-                    for (int x = -3; x <= 3; x++) {
-                        positions.add(BlockPos.containing(wall.add(right.scale(x * 0.9)).add(0, y, 0)));
-                    }
+                material = Blocks.STONE.defaultBlockState();
+                Vec3 wall = player.position().add(look.scale(3.0));
+                for (int column = -3; column <= 3; column++) {
+                    BlockPos base = surfaceBlock(level, wall.add(right.scale(column * 0.9)));
+                    for (int row = 0; row < 4; row++) positions.add(base.above(row));
                 }
             }
             case ROCK_CAGE -> {
-                material=Blocks.COBBLESTONE.defaultBlockState();
-                for(int y=0;y<3;y++)for(int side=-1;side<=1;side++){
-                    positions.add(BlockPos.containing(center.add(right.scale(side*0.9)).add(0,y-0.9,0)));
-                    if(side!=0)positions.add(BlockPos.containing(center.add(look.scale(side*0.9)).add(0,y-0.9,0)));
+                material = Blocks.COBBLESTONE.defaultBlockState();
+                double radius = 1.35D;
+                for (int row = 0; row < 3; row++) {
+                    for (int pillar = 0; pillar < 8; pillar++) {
+                        double angle = Math.PI * 2.0D * pillar / 8.0D;
+                        Vec3 column = center.add(right.scale(Math.cos(angle) * radius))
+                                .add(look.scale(Math.sin(angle) * radius));
+                        positions.add(surfaceBlock(level, column).above(row));
+                    }
+                }
+                for (int pillar = 0; pillar < 8; pillar += 2) {
+                    double angle = Math.PI * 2.0D * pillar / 8.0D;
+                    Vec3 cap = center.add(right.scale(Math.cos(angle) * radius))
+                            .add(look.scale(Math.sin(angle) * radius));
+                    positions.add(surfaceBlock(level, cap).above(3));
                 }
             }
-            case ICE_BIND -> {
-                material=Blocks.PACKED_ICE.defaultBlockState();
-                for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)for(int y=0;y<3;y++)
-                    positions.add(BlockPos.containing(center.add(right.scale(x*0.85)).add(0,y-0.9,0).add(look.scale(z*0.85))));
-            }
-            case SEISMIC_WAVE,EARTHQUAKE -> {
-                material=Blocks.COBBLESTONE.defaultBlockState();
-                lifetime=40;
-                for(int step=1;step<=6;step++){
-                    Vec3 spike=player.position().add(look.scale(step*1.05));
-                    positions.add(BlockPos.containing(spike.add(0,-0.2,0)));
-                    if(ability==ElementalAbility.EARTHQUAKE){
-                        positions.add(BlockPos.containing(spike.add(right.scale(0.65)).add(0,-0.2,0)));
-                        positions.add(BlockPos.containing(spike.subtract(right.scale(0.65)).add(0,-0.2,0)));
+            case SEISMIC_WAVE, EARTHQUAKE -> {
+                material = Blocks.COBBLESTONE.defaultBlockState();
+                lifetime = 40;
+                for (int step = 1; step <= 6; step++) {
+                    Vec3 impact = player.position().add(look.scale(step * 1.05D));
+                    int sideLimit = ability == ElementalAbility.EARTHQUAKE ? 1 : 0;
+                    for (int side = -sideLimit; side <= sideLimit; side++) {
+                        BlockPos base = surfaceBlock(level, impact.add(right.scale(side * 0.72D)));
+                        positions.add(base);
+                        if (ability == ElementalAbility.EARTHQUAKE && step % 2 == 0) {
+                            positions.add(base.above());
+                        }
                     }
                 }
             }
-            default -> { return; }
+            default -> {
+                return;
+            }
         }
-        List<TemporaryBlock> placedBlocks = TEMPORARY_BLOCKS.computeIfAbsent(player.getUUID(), k -> new ArrayList<>());
+
+        List<TemporaryBlock> placedBlocks = TEMPORARY_BLOCKS.computeIfAbsent(
+                player.getUUID(), ignored -> new ArrayList<>());
         int from = positions.size() * stage / 9;
         int to = positions.size() * (stage + 1) / 9;
         for (int index = from; index < to; index++) {
             BlockPos pos = positions.get(index);
-            if (!level.isEmptyBlock(pos) || !level.getBlockState(pos.below()).isSolid()) continue;
+            if (!level.hasChunkAt(pos) || !level.isEmptyBlock(pos) || level.getBlockEntity(pos) != null) continue;
+            if (!level.getBlockState(pos.below()).isSolid()) continue;
+            AABB occupied = new AABB(pos.getX(), pos.getY(), pos.getZ(),
+                    pos.getX() + 1.0D, pos.getY() + 1.0D, pos.getZ() + 1.0D);
+            if (player.getBoundingBox().intersects(occupied)) continue;
             BlockState previous = level.getBlockState(pos);
             if (level.setBlock(pos, material, 3)) {
                 placedBlocks.add(new TemporaryBlock(level, pos, previous, material,
-                        level.getGameTime() + lifetime));
+                        level.getGameTime() + lifetime, ability.id()));
+                if (Boolean.getBoolean("elemental.vfx.smoke")) {
+                    System.out.println("[ELEMENTAL_STONE_SMOKE] BLOCK_PLACED ability="
+                            + ability.id() + " pos=" + pos);
+                }
             }
         }
     }
@@ -662,8 +725,13 @@ public final class ElementalAbilityService {
             while(it.hasNext()){
                 TemporaryBlock block=it.next();
                 if(block.level().getGameTime()>=block.restoreGameTime()){
-                    if(block.level().getBlockState(block.pos()).equals(block.placed()))
+                    if(block.level().getBlockState(block.pos()).equals(block.placed())) {
                         block.level().setBlock(block.pos(),block.original(),3);
+                        if (Boolean.getBoolean("elemental.vfx.smoke")) {
+                            System.out.println("[ELEMENTAL_STONE_SMOKE] BLOCK_RESTORED ability="
+                                    + block.abilityId() + " pos=" + block.pos());
+                        }
+                    }
                     it.remove();
                 }
             }

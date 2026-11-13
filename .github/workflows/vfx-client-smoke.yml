@@ -66,7 +66,7 @@ jobs:
           rcon.port=25575
           motd=Elemental Legacy VFX Smoke
           EOF
-          nohup gradle runServer --no-daemon --max-workers=2 > "$RUNNER_TEMP/server.log" 2>&1 &
+          nohup gradle runServer -PelementalSmoke --no-daemon --max-workers=2 > "$RUNNER_TEMP/server.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/server.pid"
           for i in $(seq 1 120); do
             if grep -q 'Done (' "$RUNNER_TEMP/server.log"; then
@@ -90,7 +90,7 @@ jobs:
           ALSOFT_DRIVERS: 'null'
         run: |
           cat > "$RUNNER_TEMP/rcon_smoke.py" <<'PY'
-          import socket, struct, time
+          import os, pathlib, socket, struct, time
 
           def read_packet(sock):
               header = sock.recv(4)
@@ -129,7 +129,7 @@ jobs:
                   raise RuntimeError("RCON authentication failed")
               print("RCON authenticated")
               commands = [
-                  "execute as Dev run elemental choose ember",
+                  "execute as Dev run elemental choose stone",
                   "execute as Dev run elemental sync",
                   "time set day",
                   "weather clear",
@@ -141,6 +141,40 @@ jobs:
                   sock.sendall(packet(index, 2, command))
                   response_id, _, response = read_packet(sock)
                   print(f"RCON {command}: {response}")
+
+              # Wait until the client-only 24-technique timeline is complete so the
+              # server-authoritative Stone actions can be captured separately.
+              client_log = pathlib.Path(os.environ["RUNNER_TEMP"]) / "client.log"
+              deadline = time.time() + 160
+              while time.time() < deadline:
+                  try:
+                      completed = "COMPLETED: all 24 techniques rendered" in client_log.read_text(errors="replace")
+                  except FileNotFoundError:
+                      completed = False
+                  if completed:
+                      break
+                  time.sleep(2)
+              else:
+                  raise RuntimeError("Client visual sequence did not complete before Stone server smoke.")
+
+              print("Client visual sequence complete; executing all six server-authoritative Stone techniques.")
+              stone_abilities = [
+                  ("rock_throw", 5),
+                  ("stone_wall", 13),
+                  ("rock_cage", 15),
+                  ("seismic_wave", 13),
+                  ("stone_armor", 17),
+                  ("earthquake", 4),
+              ]
+              for index, (ability, delay) in enumerate(stone_abilities, 100):
+                  command = f"execute as Dev run elemental use {ability}"
+                  sock.sendall(packet(index, 2, command))
+                  response_id, _, response = read_packet(sock)
+                  print(f"STONE RCON {ability}: {response}")
+                  if "executada" not in response.lower():
+                      raise RuntimeError(f"Stone technique {ability} was rejected: {response}")
+                  time.sleep(delay)
+              print("STONE_SERVER_SMOKE_COMPLETE 6/6")
           PY
 
           cat > "$RUNNER_TEMP/extract_vfx_evidence.py" <<'PY'
@@ -228,6 +262,67 @@ jobs:
           if screenshot_count != 120 or not contact_sheet.exists() or contact_sheet.stat().st_size < 1024:
               raise SystemExit(f"Incomplete animation timeline evidence: {screenshot_count}/120.")
           print(f"Timestamped animation timelines: {screenshot_count}/120 screenshots generated; 24x5 contact sheet ready.")
+
+          # The second pass captures the six techniques triggered through the real server command path.
+          server_log = root / "server.log"
+          server_text = server_log.read_text(errors="replace") if server_log.exists() else ""
+          stone_pattern = re.compile(
+              r"\[ELEMENTAL_STONE_SMOKE\] ABILITY_START ([a-z0-9_]+) atMs=(\d+)"
+          )
+          stone_starts = {}
+          for ability, timestamp in stone_pattern.findall(server_text):
+              stone_starts[ability] = int(timestamp)
+
+          stone_order = [
+              "rock_throw", "stone_wall", "rock_cage",
+              "seismic_wave", "stone_armor", "earthquake"
+          ]
+          if set(stone_starts) != set(stone_order):
+              raise SystemExit(
+                  f"Expected six server-authoritative Stone activations; found {sorted(stone_starts)}"
+              )
+
+          stone_dir = root / "stone-server-evidence"
+          stone_dir.mkdir(parents=True, exist_ok=True)
+          stone_offsets = (0.20, 0.55, 0.90, 1.25, 1.65)
+          stone_manifest = [
+              "index\tability\tsample_index\tvideo_time_seconds\tserver_start_ms"
+          ]
+          stone_screenshot_count = 0
+          for index, ability in enumerate(stone_order, 1):
+              for sample_index, offset in enumerate(stone_offsets, 1):
+                  video_time = (stone_starts[ability] - capture_start_ms) / 1000.0 + offset
+                  if video_time < 0 or video_time > 255:
+                      raise SystemExit(
+                          f"Invalid Stone server evidence offset for {ability}: {video_time:.3f}s"
+                      )
+                  image_path = stone_dir / f"{index:02d}_{ability}_server_{sample_index:02d}.png"
+                  subprocess.run([
+                      "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                      "-ss", f"{video_time:.3f}", "-i", str(video_path),
+                      "-frames:v", "1", str(image_path)
+                  ], check=True)
+                  if not image_path.exists() or image_path.stat().st_size < 1024:
+                      raise SystemExit(f"Server Stone screenshot missing: {ability} {sample_index}/5")
+                  stone_screenshot_count += 1
+                  stone_manifest.append(
+                      f"{index:02d}\t{ability}\t{sample_index}\t{video_time:.3f}\t{stone_starts[ability]}"
+                  )
+
+          (stone_dir / "manifest.tsv").write_text("\n".join(stone_manifest) + "\n")
+          stone_contact = stone_dir / "timeline-contact.jpg"
+          subprocess.run([
+              "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+              "-framerate", "1", "-pattern_type", "glob",
+              "-i", str(stone_dir / "*.png"),
+              "-vf", "scale=320:180,tile=5x6",
+              "-frames:v", "1", str(stone_contact)
+          ], check=True)
+          if stone_screenshot_count != 30 or not stone_contact.exists() or stone_contact.stat().st_size < 1024:
+              raise SystemExit(
+                  f"Incomplete server-authoritative Stone evidence: {stone_screenshot_count}/30."
+              )
+          print("Server-authoritative Stone timelines: 30/30 screenshots generated; six techniques captured.")
           PY
 
           set +e
@@ -239,9 +334,9 @@ jobs:
             export ALSOFT_DRIVERS=null
 
             date +%s%3N > "$RUNNER_TEMP/capture-start-ms.txt"
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 165 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 260 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
-            timeout 165s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
+            timeout 260s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
 
             # Dismiss the first-run accessibility welcome screen before quick-play connects.
@@ -268,10 +363,10 @@ jobs:
               sleep 1
             done
 
+            RCON_RC=0
             if [ "$JOINED" -eq 1 ]; then
-              # The client smoke mode hides and restores the HUD directly through Minecraft options.
-              python3 "$RUNNER_TEMP/rcon_smoke.py"
-              # The smoke client keeps the caster visible in third-person back view.
+              # The RCON script waits for the 24 client poses, then executes the six Stone abilities on the server.
+              python3 "$RUNNER_TEMP/rcon_smoke.py" || RCON_RC=$?
             fi
 
             wait "$CLIENT_PID"
@@ -282,6 +377,10 @@ jobs:
             echo "Server login detected: $JOINED"
             if [ "$JOINED" -ne 1 ]; then
               exit 21
+            fi
+            if [ "$RCON_RC" -ne 0 ]; then
+              echo "RCON Stone server smoke failed with exit code $RCON_RC."
+              exit 30
             fi
             if ! grep -q "COMPLETED: all 24 techniques rendered" "$RUNNER_TEMP/client.log"; then
               echo "The client did not complete the 24-technique visual sequence."
@@ -328,6 +427,32 @@ jobs:
             fi
             echo "Water affinity validated: near-water mesh/pose=$NEAR_WATER_VALUE/$NEAR_WATER_POSE_VALUE; swimming=1.900 for all five remaining Tide meshes and poses."
 
+            STONE_START_COUNT=$(grep -c "\[ELEMENTAL_STONE_SMOKE\] ABILITY_START " "$RUNNER_TEMP/server.log" || true)
+            if [ "$STONE_START_COUNT" -ne 6 ]; then
+              echo "Expected six server-authoritative Stone abilities, found $STONE_START_COUNT."
+              exit 31
+            fi
+            for ability in rock_throw stone_wall rock_cage seismic_wave stone_armor earthquake; do
+              if ! grep -q "\[ELEMENTAL_STONE_SMOKE\] ABILITY_START $ability " "$RUNNER_TEMP/server.log"; then
+                echo "Missing server execution for Stone technique $ability."
+                exit 32
+              fi
+            done
+            if ! grep -q "\[ELEMENTAL_STONE_SMOKE\] GROUND_DEBRIS ability=rock_throw" "$RUNNER_TEMP/server.log"; then
+              echo "Rock Throw did not emit terrain-textured launch debris."
+              exit 33
+            fi
+            for ability in stone_wall rock_cage seismic_wave earthquake; do
+              placed=$(grep -c "\[ELEMENTAL_STONE_SMOKE\] BLOCK_PLACED ability=$ability " "$RUNNER_TEMP/server.log" || true)
+              restored=$(grep -c "\[ELEMENTAL_STONE_SMOKE\] BLOCK_RESTORED ability=$ability " "$RUNNER_TEMP/server.log" || true)
+              if [ "$placed" -lt 3 ] || [ "$restored" -lt 3 ]; then
+                echo "Temporary terrain interaction incomplete for $ability: placed=$placed restored=$restored."
+                exit 34
+              fi
+              echo "Stone terrain $ability: placed=$placed temporary blocks; restored=$restored."
+            done
+            echo "Stone server validation: 6/6 abilities executed; terrain structures were placed only in air and restored."
+
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
             fi
@@ -356,4 +481,5 @@ jobs:
             ${{ runner.temp }}/glx-info.txt
             ${{ runner.temp }}/vulkan-info.txt
             ${{ runner.temp }}/vfx-evidence/
+            ${{ runner.temp }}/stone-server-evidence/
           if-no-files-found: warn

@@ -657,24 +657,37 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockProjectiles(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp((t - 0.04F) / 0.62F));
+        float travel = ease(clamp((t - 0.035F) / 0.62F));
         for (int i = 0; i < 3; i++) {
-            double z = 1.00 + travel * 3.00 + i * 0.24;
-            double side = (i - 1) * 0.92 + Math.sin(t * 8.0 + i) * 0.12;
-            double height = 0.42 + Math.sin(t * 11.0 + i) * 0.12;
-            Vec3 rock = point(fx, side, height, z);
-            List<Vec3> trail = List.of(
-                    point(fx, side * 0.78, height * 0.72, z - 0.72),
-                    point(fx, side, height + 0.10, z - 0.28),
-                    rock
-            );
-            ribbon(out, pose, trail, 0.17, 0xFFB79A72);
-            spike(out, pose, rock, 0.48, 0.98, 0xFF8E765B);
-            orb(out, pose, rock.add(0, -0.08, 0), 0.22, 0xFFD9BD91, 7, 10);
+            double z = 0.92 + travel * 4.55 + i * 0.22;
+            double side = (i - 1) * 0.88 + Math.sin(t * 7.2 + i) * 0.10;
+            double height = 0.38 + Math.sin(t * 8.5 + i * 1.7) * 0.13;
+            Vec3 center = point(fx, side, height, z);
+            double radius = 0.48 + (i == 1 ? 0.10 : 0.0);
+            facetedRock(out, pose, fx, center, radius, 0.66, t * 3.0 + i * 1.25, i);
+
+            List<Vec3> wake = new ArrayList<>();
+            for (int segment = 0; segment <= 8; segment++) {
+                double u = segment / 8.0D;
+                wake.add(point(fx,
+                        side * (0.78 + u * 0.12) + Math.sin(t * 8.0 + u * 4.0 + i) * 0.08,
+                        height - 0.10 + u * 0.08,
+                        z - 0.18 - u * 1.05));
+            }
+            ribbon(out, pose, wake, 0.12, 0xFF8D765B);
+            ribbon(out, pose, wake, 0.045, 0xFFD5BE98);
+
+            for (int chip = 0; chip < 3; chip++) {
+                Vec3 fragment = center.add(fx.right().scale((chip - 1) * 0.30))
+                        .add(0.0, (chip - 1) * 0.16, 0.0)
+                        .add(fx.forward().scale(-0.22 - chip * 0.12));
+                facetedRock(out, pose, fx, fragment, 0.13, 0.20,
+                        -t * 4.0 + chip, 4 + chip);
+            }
         }
     }
 
-    /**
+        /**
      * A broad rampart grown from the actual block surface: layered stone courses,
      * a raised foundation, buttresses, irregular merlons and visible fracture seams.
      */
@@ -777,29 +790,51 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float rise = ease(clamp((t - 0.05F) / 0.46F));
-        double radius = 1.62;
+        float rise = ease(clamp((t - 0.035F) / 0.38F));
+        float settle = 1.0F - ease(clamp((t - 0.86F) / 0.14F));
+        float formed = rise * settle;
+        double radius = 1.58;
         double centerForward = 3.35;
-        List<Vec3> crown = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
-            double a = Math.PI * 2.0 * i / 10.0;
-            double side = Math.cos(a) * radius;
-            double forward = centerForward + Math.sin(a) * radius;
-            Vec3 base = point(fx, side, 0, forward);
-            spike(out, pose, base.add(0, 1.75 * rise, 0), 0.38, 2.05 * rise, 0xFF887052);
-            if ((i & 1) == 0) {
-                box(out, pose, base.add(0, 1.30 * rise, 0), 0.34, 0.30, 0.34, 0xFFB89A70);
-            }
-            crown.add(point(fx, side, 2.05 * rise, forward));
+        List<Vec3> baseRing = new ArrayList<>();
+        List<Vec3> middleRing = new ArrayList<>();
+        List<Vec3> crownRing = new ArrayList<>();
+
+        for (int pillar = 0; pillar < 8; pillar++) {
+            double angle = Math.PI * 2.0 * pillar / 8.0;
+            double side = Math.cos(angle) * radius;
+            double forward = centerForward + Math.sin(angle) * radius;
+            double ground = terrainOffset(fx, side, forward);
+            Vec3 base = point(fx, side, ground + 0.05, forward);
+            Vec3 middle = point(fx, side, ground + 1.32 * formed, forward);
+            Vec3 crown = point(fx, side, ground + 2.66 * formed, forward);
+            baseRing.add(base);
+            middleRing.add(middle);
+            crownRing.add(crown);
+
+            orientedBox(out, pose, fx,
+                    point(fx, side, ground + 1.32 * formed, forward),
+                    0.46 * formed, 2.64 * formed, 0.48 * formed,
+                    pillar % 2 == 0 ? 0xFF9A8B75 : 0xFF766B5A);
+            facetedRock(out, pose, fx,
+                    point(fx, side, ground + 2.72 * formed, forward),
+                    0.25 * formed, 0.48 * formed, angle + t * 0.25, pillar + 10);
         }
-        for (int i = 0; i < crown.size(); i++) {
-            ribbon(out, pose, List.of(crown.get(i), crown.get((i + 1) % crown.size())),
-                    0.075, 0xFFD5B88B);
+
+        ribbon(out, pose, baseRing, 0.105 * formed, 0xFFB5A184);
+        ribbon(out, pose, middleRing, 0.095 * formed, 0xFFD0BE9F);
+        ribbon(out, pose, crownRing, 0.12 * formed, 0xFFE0D0B2);
+        for (int pillar = 0; pillar < 8; pillar++) {
+            Vec3 lower = baseRing.get(pillar).add(0.0, 0.48 * formed, 0.0);
+            Vec3 upper = middleRing.get((pillar + 1) % 8).add(0.0, 0.18 * formed, 0.0);
+            ribbon(out, pose, List.of(lower, upper), 0.055 * formed, 0xFF8A7B65);
         }
-        groundRing(fx, pose, out, centerForward, radius + 0.18, 0.04, 0xFFB99A70, 56);
+        groundRing(fx, pose, out, centerForward, radius + 0.28, 0.045,
+                0xFFD5C4A6, 64);
+        groundRing(fx, pose, out, centerForward, radius * 0.72, 0.025,
+                0xFF6E6557, 48);
     }
 
-    /**
+        /**
      * The ground is the main character of this technique: terrain-following cracks,
      * lifted stone plates, debris spires and expanding fault rings make the impact
      * read as a real earthquake rather than a row of floating spikes.
@@ -891,6 +926,9 @@ public final class TechniqueVisualRenderer {
 
         for (int sideSign : new int[]{-1, 1}) {
             double side = sideSign;
+            // Raised faceted pauldrons make the shoulder silhouette read as stone, not cloth.
+            facetedRock(out, pose, fx, point(fx, side * 0.34, 0.31, 0.02),
+                    0.22 * armor, 0.30 * armor, sideSign * 0.28, 20 + sideSign);
             // Shoulder plates sit over the model's shoulder pivot.
             orientedBox(out, pose, fx, point(fx, side * 0.33, 0.27, 0.00),
                     0.29 * armor, 0.22 * armor, 0.34 * armor, light);
@@ -1308,6 +1346,62 @@ public final class TechniqueVisualRenderer {
         quad(out, pose, c, d, tip, tip, color);
         quad(out, pose, d, a, tip, tip, color);
         quad(out, pose, a, d, c, b, 0xFF6F5C47);
+    }
+
+    private static void triangle(VertexConsumer out, PoseStack.Pose pose,
+                                  Vec3 a, Vec3 b, Vec3 c, int color) {
+        Vec3 normal = b.subtract(a).cross(c.subtract(a));
+        if (normal.lengthSqr() < 0.000001) normal = new Vec3(0.0, 1.0, 0.0);
+        else normal = normal.normalize();
+        vertex(out, pose, a, color, 0.0F, 1.0F, normal);
+        vertex(out, pose, b, color, 1.0F, 1.0F, normal);
+        vertex(out, pose, c, color, 0.5F, 0.0F, normal);
+        Vec3 reverse = normal.scale(-1.0);
+        vertex(out, pose, c, color, 0.5F, 0.0F, reverse);
+        vertex(out, pose, b, color, 1.0F, 1.0F, reverse);
+        vertex(out, pose, a, color, 0.0F, 1.0F, reverse);
+    }
+
+    /** Faceted, rotating boulder mesh with irregular mineral planes and a solid core silhouette. */
+    private static void facetedRock(VertexConsumer out, PoseStack.Pose pose, ActiveEffect fx,
+                                    Vec3 center, double radius, double height, double rotation, int seed) {
+        int sides = 8;
+        List<Vec3> lower = new ArrayList<>();
+        List<Vec3> upper = new ArrayList<>();
+        for (int i = 0; i < sides; i++) {
+            double angle = Math.PI * 2.0 * i / sides + rotation;
+            double jitter = 0.86 + 0.13 * Math.sin(i * 2.31 + seed * 1.7);
+            double lateral = Math.cos(angle) * radius * jitter;
+            double depth = Math.sin(angle) * radius * 0.78 * jitter;
+            lower.add(center.add(fx.right().scale(lateral))
+                    .add(0.0, -height * (0.34 + 0.035 * Math.sin(i + seed)), 0.0)
+                    .add(fx.forward().scale(depth)));
+            upper.add(center.add(fx.right().scale(lateral * 0.72))
+                    .add(0.0, height * (0.22 + 0.045 * Math.cos(i * 1.4 + seed)), 0.0)
+                    .add(fx.forward().scale(depth * 0.72)));
+        }
+        Vec3 top = center.add(0.0, height * 0.48, 0.0);
+        Vec3 bottom = center.add(0.0, -height * 0.42, 0.0);
+        int[] tones = {
+                0xFF8D765B, 0xFFB49A76, 0xFF786A57, 0xFFC2AA86,
+                0xFF9A8263, 0xFF6E6252, 0xFFB9A17E, 0xFF88745A
+        };
+        for (int i = 0; i < sides; i++) {
+            int next = (i + 1) % sides;
+            int tone = tones[Math.floorMod(i + seed, tones.length)];
+            triangle(out, pose, lower.get(i), lower.get(next), upper.get(next), tone);
+            triangle(out, pose, lower.get(i), upper.get(next), upper.get(i), tone);
+            triangle(out, pose, top, upper.get(i), upper.get(next), 0xFFD1BE9E);
+            triangle(out, pose, bottom, lower.get(next), lower.get(i), 0xFF625746);
+        }
+        List<Vec3> fracture = new ArrayList<>();
+        for (int i = 0; i <= 4; i++) {
+            double u = i / 4.0D;
+            fracture.add(center.add(fx.right().scale(-radius * 0.36 + u * radius * 0.72))
+                    .add(0.0, height * (0.20 - u * 0.34), 0.0)
+                    .add(fx.forward().scale(radius * 0.50)));
+        }
+        ribbon(out, pose, fracture, Math.max(0.012, radius * 0.035), 0xFF594E40);
     }
 
     private static void box(VertexConsumer out, PoseStack.Pose pose, Vec3 center,

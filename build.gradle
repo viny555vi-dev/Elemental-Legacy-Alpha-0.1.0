@@ -19,7 +19,11 @@ neoForge {
     programArguments.addAll '--quickPlayMultiplayer', '127.0.0.1', '--width', '1280', '--height', '720'
    }
   }
-  server { server(); programArgument '--nogui' }
+  server {
+   server()
+   programArgument '--nogui'
+   if (project.hasProperty('elementalSmoke')) systemProperty 'elemental.vfx.smoke', 'true'
+  }
   gameTestServer { type="gameTestServer"; systemProperty 'neoforge.enabledGameTestNamespaces',project.mod_id }
   data { clientData(); programArguments.addAll '--mod',project.mod_id,'--all','--output',file('src/generated/resources/').getAbsolutePath(),'--existing',file('src/main/resources/').getAbsolutePath() }
  }
