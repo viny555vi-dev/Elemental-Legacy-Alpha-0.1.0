@@ -219,8 +219,8 @@ public final class TechniqueVisualRenderer {
         boolean swimmingScenario = isWaterTechnique(ability) && !"water_projectile".equals(ability);
         if (swimmingScenario) mc.player.setSwimming(true);
         start(mc.player.getId(), ability);
-        mc.player.setSwimming(originalSwimming);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
+        mc.player.setSwimming(originalSwimming);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
         smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
     }
