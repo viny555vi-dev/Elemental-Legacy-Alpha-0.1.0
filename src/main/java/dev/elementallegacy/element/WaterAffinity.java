@@ -18,7 +18,7 @@ public final class WaterAffinity {
     public static float fromEnvironment(Entity entity){
         if(entity.isSwimming())return 1.90F;
         if(entity.isUnderWater())return 1.72F;
-        if(entity.isInWaterOrBubble())return 1.52F;
+        if(entity.isInWater())return 1.52F;
         Level level=entity.level();
         BlockPos origin=entity.blockPosition();
         double nearestDistanceSqr=Double.MAX_VALUE;

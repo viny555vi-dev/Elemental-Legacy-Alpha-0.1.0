@@ -92,7 +92,7 @@ public final class PlayerAbilityAnimator {
         }
         ActiveAnimation active = ACTIVE.get(state.id);
         if (active == null) return;
-        animateRenderState(state, active.abilityId(), t);
+        animateRenderState(state, active.abilityId(), t, active.waterAffinity());
         if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_POSES_APPLIED.add(active.abilityId())) {
             System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_STATE_MODIFIED " + active.abilityId()
                     + " bodyRot=" + state.bodyRot
@@ -275,7 +275,7 @@ public final class PlayerAbilityAnimator {
         }
     }
 
-    private static void animateRenderState(AvatarRenderState state, String abilityId, float t) {
+    private static void animateRenderState(AvatarRenderState state, String abilityId, float t,float waterAffinity) {
         float charge = 1.0F - smooth(t / 0.38F);
         float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
         float recovery = smooth((t - 0.66F) / 0.34F);
@@ -487,7 +487,12 @@ public final class PlayerAbilityAnimator {
         }
 
         // Store articulated ModelPart rotations for the tail of PlayerModel.setupAnim.
-        MODEL_POSES.put(state.id, createModelPose(abilityId, t, bodyTurn, bodyLean,active.waterAffinity()));
+        if(waterAffinity>=1.70F){
+            swimmingPose=true;
+            crouch=false;
+            gait=Math.max(gait,0.94F);
+        }
+        MODEL_POSES.put(state.id, createModelPose(abilityId, t, bodyTurn, bodyLean,waterAffinity));
         state.isCrouching = state.isCrouching || crouch;
         state.isFallFlying = state.isFallFlying || flyingPose;
         if (flyingPose) state.fallFlyingTimeInTicks = Math.max(state.fallFlyingTimeInTicks, t * DURATION_TICKS);
