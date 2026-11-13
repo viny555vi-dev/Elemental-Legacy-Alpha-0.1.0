@@ -1,0 +1,34 @@
+plugins {
+ id 'java-library'
+ id 'maven-publish'
+ id 'net.neoforged.moddev' version '2.0.148'
+ id 'idea'
+}
+version=mod_version
+group=mod_group_id
+sourceSets.main.resources { srcDir('src/generated/resources') }
+base { archivesName=mod_id }
+java.toolchain.languageVersion=JavaLanguageVersion.of(25)
+neoForge {
+ version=project.neo_version
+ runs {
+  client {
+   client()
+   if (project.hasProperty('elementalSmoke')) {
+    systemProperty 'elemental.vfx.smoke', 'true'
+    programArguments.addAll '--quickPlayMultiplayer', '127.0.0.1', '--width', '1280', '--height', '720'
+   }
+  }
+  server { server(); programArgument '--nogui' }
+  gameTestServer { type="gameTestServer"; systemProperty 'neoforge.enabledGameTestNamespaces',project.mod_id }
+  data { clientData(); programArguments.addAll '--mod',project.mod_id,'--all','--output',file('src/generated/resources/').getAbsolutePath(),'--existing',file('src/main/resources/').getAbsolutePath() }
+ }
+ mods { "${mod_id}" { sourceSet(sourceSets.main) } }
+}
+tasks.withType(ProcessResources).configureEach {
+ var props=[minecraft_version:minecraft_version,minecraft_version_range:minecraft_version_range,neo_version:neo_version,mod_id:mod_id,mod_name:mod_name,mod_license:mod_license,mod_version:mod_version]
+ inputs.properties props
+ filesMatching(['META-INF/neoforge.mods.toml']) { expand props }
+}
+tasks.withType(JavaCompile).configureEach { options.encoding='UTF-8' }
+idea { module { downloadSources=true; downloadJavadoc=true } }
