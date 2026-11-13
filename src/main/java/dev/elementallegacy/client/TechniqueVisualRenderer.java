@@ -258,6 +258,11 @@ public final class TechniqueVisualRenderer {
         return fx.right().scale(side).add(0.0, up, 0.0).add(fx.forward().scale(forward));
     }
 
+    /** Water techniques draw more mass and travel faster as the caster gains aquatic affinity. */
+    private static double waterPower(ActiveEffect fx) {
+        return 1.0D + Math.min(0.35D, Math.max(0.0D, fx.waterAffinity() - 1.0D) * 0.32D);
+    }
+
     private static void projectile(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                    int outer, int core, double radius) {
         // Launch from just beyond the casting hand and keep the core outside the
@@ -415,13 +420,14 @@ public final class TechniqueVisualRenderer {
 
     /** Pressurised water lance with a liquid core, helical sheeting and spray wake. */
     private static void waterJet(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
-        float travel=ease(clamp((t-0.035F)/0.72F));
-        double depth=0.9+travel*6.0;
-        double side=0.62+Math.sin(t*7.5)*0.05;
-        double height=0.22+Math.sin(t*9.0)*0.035;
+        double power=waterPower(fx);
+        float travel=ease(clamp((t-0.035F)/(float)(0.72D/power)));
+        double depth=0.9+travel*6.0*power;
+        double side=0.62+Math.sin(t*7.5)*0.05*power;
+        double height=0.22+Math.sin(t*9.0)*0.035*power;
         Vec3 head=point(fx,side,height,depth);
-        orb(out,pose,head,0.48,0xB91C9FD8,10,20);
-        orb(out,pose,head,0.29,0xE8D8FBFF,9,18);
+        orb(out,pose,head,0.48*power,0xB91C9FD8,10,20);
+        orb(out,pose,head,0.29*power,0xE8D8FBFF,9,18);
         for(int layer=0;layer<4;layer++){
             ringOffset(out,pose,fx,side,height,depth-0.48+layer*0.16,
                     0.28+layer*0.07,layer%2==0?0xD1BDF8FF:0x9F42B9E7,40,-t*4.0+layer*0.45,0.075);
@@ -435,7 +441,7 @@ public final class TechniqueVisualRenderer {
                 stream.add(point(fx,side+Math.cos(angle)*radius,height+Math.sin(angle)*radius,
                         0.36+u*(depth-0.28)));
             }
-            ribbon(out,pose,stream,strand==0?0.155:0.105,
+            ribbon(out,pose,stream,(strand==0?0.155:0.105)*power,
                     strand%2==0?0xDDA4EFFF:0xBAE5FFFF);
         }
         for(int drop=0;drop<5;drop++){
@@ -449,20 +455,21 @@ public final class TechniqueVisualRenderer {
 
     /** Wide flowing water arc, shaped as a fluid ribbon rather than a generic rope. */
     private static void waterWhip(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
+        double power=waterPower(fx);
         float sweep=ease(clamp((t-0.08F)/0.64F));
         for(int strand=0;strand<4;strand++){
             List<Vec3> flow=new ArrayList<>();
             for(int n=0;n<=34;n++){
                 double u=n/34.0;
                 double angle=-1.52+3.04*u*sweep;
-                double reach=2.45+strand*0.12;
+                double reach=(2.45+strand*0.12)*power;
                 double side=Math.sin(angle)*reach;
                 double forward=0.72+Math.cos(angle)*1.48;
                 double crest=0.22+Math.sin(u*Math.PI)*(0.76+strand*0.09)
                         +Math.sin(u*Math.PI*5.0-t*9.0)*0.055;
                 flow.add(point(fx,side,crest,forward));
             }
-            ribbon(out,pose,flow,strand==0?0.22:0.105,
+            ribbon(out,pose,flow,(strand==0?0.22:0.105)*power,
                     strand==0?0xC51D9DDD:(strand%2==0?0xD9B8F7FF:0xA746BCEB));
         }
         List<Vec3> brightEdge=new ArrayList<>();
@@ -472,7 +479,7 @@ public final class TechniqueVisualRenderer {
             brightEdge.add(point(fx,Math.sin(angle)*2.50,0.26+Math.sin(u*Math.PI)*0.84,
                     0.72+Math.cos(angle)*1.48));
         }
-        ribbon(out,pose,brightEdge,0.038,0xF0E9FFFF);
+        ribbon(out,pose,brightEdge,0.038*power,0xF0E9FFFF);
         for(int i=0;i<7;i++){
             double u=i/7.0;
             double angle=-1.52+3.04*u*sweep;
@@ -484,6 +491,7 @@ public final class TechniqueVisualRenderer {
 
     /** A rotating, fluid shell around the caster with crossing current bands. */
     private static void waterShield(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
+        double power=waterPower(fx);
         float pulse=0.94F+(float)Math.sin(t*Math.PI*6.0)*0.055F;
         for(int strand=0;strand<8;strand++){
             List<Vec3> current=new ArrayList<>();
@@ -491,27 +499,28 @@ public final class TechniqueVisualRenderer {
                 double u=n/42.0;
                 double angle=u*Math.PI*2.0+strand*Math.PI/4.0+t*2.8;
                 double latitude=-1.0+u*2.0;
-                double radius=1.0*pulse+0.11*Math.sin(u*Math.PI*4.0+strand+t*5.0);
+                double radius=(1.0*pulse+0.11*Math.sin(u*Math.PI*4.0+strand+t*5.0))*power;
                 current.add(point(fx,Math.cos(angle)*radius*Math.cos(latitude),
-                        Math.sin(latitude)*1.30,Math.sin(angle)*radius*Math.cos(latitude)));
+                        Math.sin(latitude)*1.30*power,Math.sin(angle)*radius*Math.cos(latitude)));
             }
             ribbon(out,pose,current,strand%2==0?0.145:0.095,
                     strand%2==0?0xC61D9DDD:0xD7B5F6FF);
         }
         for(int band=0;band<6;band++){
             double y=-0.95+band*0.38;
-            double radius=1.08*Math.sqrt(Math.max(0.08,1.0-y*y/1.72));
+            double radius=1.08*power*Math.sqrt(Math.max(0.08,1.0-y*y/1.72));
             ringAtWide(out,pose,fx,y,radius,band==2||band==3?0xE5E6FFFF:0xA84EBDE8,
                     64,true,t*(band%2==0?1.9:-1.9),0.105);
         }
-        ringWide(out,pose,fx,0.0,1.17,0xC9DDFBFF,72,t*1.0,0.10);
-        ringWide(out,pose,fx,0.0,0.88,0xA73BAEDB,72,-t*1.35,0.08);
+        ringWide(out,pose,fx,0.0,1.17*power,0xC9DDFBFF,72,t*1.0,0.10*power);
+        ringWide(out,pose,fx,0.0,0.88*power,0xA73BAEDB,72,-t*1.35,0.08*power);
     }
 
     private static void greatWave(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp((t - 0.08F) / 0.68F));
-        double width = 0.8 + 3.2 * travel;
-        double depth = 1.3 + 5.2 * travel;
+        double power=waterPower(fx);
+        float travel = ease(clamp((t - 0.08F) / (float)(0.68D/power)));
+        double width = (0.8 + 3.2 * travel)*power;
+        double depth = (1.3 + 5.2 * travel)*power;
         int columns = 22;
         int rows = 7;
         for (int x = 0; x < columns; x++) {
@@ -541,7 +550,7 @@ public final class TechniqueVisualRenderer {
     private static Vec3 wavePoint(ActiveEffect fx, double u, double v, double width, double depth, float t) {
         double side = (u - 0.5) * width * 2.0;
         double curl = Math.sin(u * Math.PI * 2.6 + t * 7.0) * (0.22 + v * 0.18);
-        double height = v * (1.1 + 1.9 * Math.sin(Math.PI * u)) + curl;
+        double height = (v * (1.1 + 1.9 * Math.sin(Math.PI * u)) + curl)*waterPower(fx);
         return point(fx, side, height, depth + Math.sin(u * Math.PI * 2.0 + t * 5.0) * 0.18);
     }
 
@@ -554,7 +563,7 @@ public final class TechniqueVisualRenderer {
         float rise = ease(clamp(t / 0.17F));
         float release = 1.0F - ease(clamp((t - 0.86F) / 0.14F));
         float formed = rise * release;
-        double radius = 1.52;
+        double radius = 1.52*waterPower(fx);
         double centerForward = 3.25;
         List<Vec3> crown = new ArrayList<>();
         List<Vec3> waist = new ArrayList<>();
@@ -564,7 +573,7 @@ public final class TechniqueVisualRenderer {
             double side = Math.cos(angle) * radius;
             double forward = centerForward + Math.sin(angle) * radius;
             double base = terrainOffset(fx, side, forward);
-            double height = (3.25 + (i % 3) * 0.20) * formed;
+            double height = (3.25 + (i % 3) * 0.20) * formed*waterPower(fx);
             Vec3 center = point(fx, side, base + height * 0.48, forward);
 
             orientedBox(out, pose, fx, center, 0.30, Math.max(0.04, height * 0.92), 0.34,
@@ -610,7 +619,7 @@ public final class TechniqueVisualRenderer {
             double depth = 1.5 + Math.abs(i) * 0.28 + open * 3.4;
             Vec3 at = point(fx, side, 0.2 + Math.abs(i) * 0.08, depth);
             double width = 0.12 + 0.02 * (3 - Math.abs(i));
-            spike(out, pose, at, width, 0.95, 0xFF8CE5F8);
+            spike(out, pose, at, width*waterPower(fx), 0.95*waterPower(fx), 0xFF8CE5F8);
             ribbon(out, pose, List.of(at.add(-width * 0.2, 0.65, 0), at.add(0, 0.95, 0), at.add(width * 0.2, 0.65, 0)), 0.035, 0xFFE5FCFF);
         }
     }
