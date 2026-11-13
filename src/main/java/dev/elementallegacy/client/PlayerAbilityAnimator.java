@@ -2,6 +2,7 @@ package dev.elementallegacy.client;
 
 import dev.elementallegacy.ElementalLegacy;
 import dev.elementallegacy.ability.ElementalAbility;
+import dev.elementallegacy.element.WaterAffinity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -36,11 +37,11 @@ public final class PlayerAbilityAnimator {
     private static final Map<String, Set<Integer>> SMOKE_POSE_SAMPLE_BUCKETS = new HashMap<>();
     private static PoseSnapshot SMOKE_NEUTRAL_POSE;
 
-    private record ActiveAnimation(String abilityId, long startedAt) {}
+    private record ActiveAnimation(String abilityId, long startedAt, float waterAffinity) {}
     private record ModelPose(
             float torsoPitchDegrees, float torsoYawDegrees, float torsoRollDegrees,
             float armPitchDegrees, float armYawDegrees, float armRollDegrees, float armSwingDegrees,
-            float legDriveDegrees, float legSpreadDegrees
+            float legDriveDegrees, float legSpreadDegrees, float waterAffinity
     ) {}
     private record PoseSnapshot(
             float rightArmX, float leftArmX, float rightArmY, float leftArmY, float rightArmZ, float leftArmZ,
@@ -63,7 +64,9 @@ public final class PlayerAbilityAnimator {
     public static void start(int entityId, String abilityId) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || ElementalAbility.byId(abilityId).isEmpty()) return;
-        ACTIVE.put(entityId, new ActiveAnimation(abilityId, minecraft.level.getGameTime()));
+        var entity=minecraft.level.getEntity(entityId);
+        float waterAffinity=WaterAffinity.forAbility(entity,abilityId);
+        ACTIVE.put(entityId, new ActiveAnimation(abilityId, minecraft.level.getGameTime(),waterAffinity));
     }
 
     private static float progress(int entityId, float partialTick) {
@@ -108,9 +111,10 @@ public final class PlayerAbilityAnimator {
         ModelPose pose = MODEL_POSES.get(state.id);
         if (pose == null) return;
 
-        float torsoPitch = radians(pose.torsoPitchDegrees());
-        float torsoYaw = radians(pose.torsoYawDegrees());
-        float torsoRoll = radians(pose.torsoRollDegrees());
+        float aquaticAmplification=1.0F+(pose.waterAffinity()-1.0F)*0.46F;
+        float torsoPitch = radians(pose.torsoPitchDegrees())*aquaticAmplification;
+        float torsoYaw = radians(pose.torsoYawDegrees())*aquaticAmplification;
+        float torsoRoll = radians(pose.torsoRollDegrees())*aquaticAmplification;
 
         model.body.xRot += torsoPitch;
         model.body.yRot += torsoYaw;
@@ -121,17 +125,17 @@ public final class PlayerAbilityAnimator {
         model.head.yRot += torsoYaw * 0.30F;
         model.head.zRot += torsoRoll * 0.32F;
 
-        model.rightArm.xRot += radians(pose.armPitchDegrees() + pose.armSwingDegrees());
-        model.leftArm.xRot += radians(pose.armPitchDegrees() - pose.armSwingDegrees());
-        model.rightArm.yRot += radians(pose.armYawDegrees());
-        model.leftArm.yRot -= radians(pose.armYawDegrees());
-        model.rightArm.zRot += radians(pose.armRollDegrees());
-        model.leftArm.zRot -= radians(pose.armRollDegrees());
+        model.rightArm.xRot += radians(pose.armPitchDegrees() + pose.armSwingDegrees())*aquaticAmplification;
+        model.leftArm.xRot += radians(pose.armPitchDegrees() - pose.armSwingDegrees())*aquaticAmplification;
+        model.rightArm.yRot += radians(pose.armYawDegrees())*aquaticAmplification;
+        model.leftArm.yRot -= radians(pose.armYawDegrees())*aquaticAmplification;
+        model.rightArm.zRot += radians(pose.armRollDegrees())*aquaticAmplification;
+        model.leftArm.zRot -= radians(pose.armRollDegrees())*aquaticAmplification;
 
-        model.rightLeg.xRot += radians(pose.legDriveDegrees());
-        model.leftLeg.xRot += radians(pose.legDriveDegrees() * 0.72F);
-        model.rightLeg.zRot += radians(pose.legSpreadDegrees());
-        model.leftLeg.zRot -= radians(pose.legSpreadDegrees());
+        model.rightLeg.xRot += radians(pose.legDriveDegrees())*aquaticAmplification;
+        model.leftLeg.xRot += radians(pose.legDriveDegrees() * 0.72F)*aquaticAmplification;
+        model.rightLeg.zRot += radians(pose.legSpreadDegrees())*aquaticAmplification;
+        model.leftLeg.zRot -= radians(pose.legSpreadDegrees())*aquaticAmplification;
     }
 
     private static float radians(float degrees) {
@@ -267,7 +271,7 @@ public final class PlayerAbilityAnimator {
         ActiveAnimation active = ACTIVE.get(avatarState.id);
         if (active != null) {
             animateArm(event.getArmPart(), active.abilityId(), t,
-                    event.getArm() == HumanoidArm.RIGHT ? 1.0F : -1.0F);
+                    event.getArm() == HumanoidArm.RIGHT ? 1.0F : -1.0F,active.waterAffinity());
         }
     }
 
@@ -483,7 +487,7 @@ public final class PlayerAbilityAnimator {
         }
 
         // Store articulated ModelPart rotations for the tail of PlayerModel.setupAnim.
-        MODEL_POSES.put(state.id, createModelPose(abilityId, t, bodyTurn, bodyLean));
+        MODEL_POSES.put(state.id, createModelPose(abilityId, t, bodyTurn, bodyLean,active.waterAffinity()));
         state.isCrouching = state.isCrouching || crouch;
         state.isFallFlying = state.isFallFlying || flyingPose;
         if (flyingPose) state.fallFlyingTimeInTicks = Math.max(state.fallFlyingTimeInTicks, t * DURATION_TICKS);
@@ -503,7 +507,7 @@ public final class PlayerAbilityAnimator {
         }
     }
 
-    private static ModelPose createModelPose(String abilityId, float t, float bodyTurn, float bodyLean) {
+    private static ModelPose createModelPose(String abilityId, float t, float bodyTurn, float bodyLean,float waterAffinity) {
         float charge = 1.0F - smooth(t / 0.38F);
         float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
         float pulse = (float) Math.sin(Math.PI * clamp(t));
@@ -673,28 +677,29 @@ public final class PlayerAbilityAnimator {
         }
 
         return new ModelPose(bodyLean, bodyTurn, roll, armPitch, armYaw, armRoll,
-                armSwing, legDrive, legSpread);
+                armSwing, legDrive, legSpread,waterAffinity);
     }
 
-    private static void animateArm(ModelPart arm, String abilityId, float t, float side) {
+    private static void animateArm(ModelPart arm, String abilityId, float t, float side,float waterAffinity) {
+        float fluidAmplification=1.0F+(waterAffinity-1.0F)*0.42F;
         float charge = 1.0F - smooth(t / 0.38F);
         float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
         float pulse = (float) Math.sin(Math.PI * clamp(t));
 
         // First-person rendering has its own hook after the arm part is prepared,
         // so these rotations are applied directly at the correct time.
-        arm.xRot -= 1.05F * charge;
-        arm.xRot += 1.45F * release;
-        arm.yRot += side * 0.42F * pulse;
-        arm.zRot += side * 0.58F * pulse;
+        arm.xRot -= 1.05F * charge*fluidAmplification;
+        arm.xRot += 1.45F * release*fluidAmplification;
+        arm.yRot += side * 0.42F * pulse*fluidAmplification;
+        arm.zRot += side * 0.58F * pulse*fluidAmplification;
 
         if (abilityId.equals("fire_whip") || abilityId.equals("water_whip")
                 || abilityId.equals("ice_blades") || abilityId.equals("cyclone")) {
-            arm.zRot += side * 0.85F * (float) Math.sin(t * Math.PI * 2.0F);
+            arm.zRot += side * 0.85F * (float) Math.sin(t * Math.PI * 2.0F)*fluidAmplification;
         }
         if (abilityId.equals("air_jump") || abilityId.equals("fire_dragon")
                 || abilityId.equals("great_wave") || abilityId.equals("stone_wall")) {
-            arm.xRot -= 0.72F * pulse;
+            arm.xRot -= 0.72F * pulse*fluidAmplification;
         }
     }
 

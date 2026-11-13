@@ -3,6 +3,7 @@ package dev.elementallegacy.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.elementallegacy.ElementalLegacy;
+import dev.elementallegacy.element.WaterAffinity;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -76,7 +77,7 @@ public final class TechniqueVisualRenderer {
             "air_blast", "air_push", "air_shield", "air_jump", "air_dash", "cyclone"
     };
 
-    private record ActiveEffect(String abilityId, Vec3 origin, Vec3 forward, Vec3 right, long startedAt, int durationTicks) {}
+    private record ActiveEffect(String abilityId, Vec3 origin, Vec3 forward, Vec3 right, long startedAt, int durationTicks, float waterAffinity) {}
     private static boolean smokeStarted;
     private static boolean smokeOriginalHudHidden;
     private static int smokeNextTick;
@@ -98,7 +99,8 @@ public final class TechniqueVisualRenderer {
         if (right.lengthSqr() < 0.0001) right = new Vec3(1.0, 0.0, 0.0);
         else right = right.normalize();
         Vec3 origin = entity.position().add(0.0, Math.max(0.8, entity.getBbHeight() * 0.62), 0.0);
-        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(), durationTicksFor(abilityId)));
+        float waterAffinity=WaterAffinity.forAbility(entity,abilityId);
+        ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(), durationTicksFor(abilityId),waterAffinity));
     }
 
     @SubscribeEvent
@@ -132,6 +134,10 @@ public final class TechniqueVisualRenderer {
                     effect.origin().z - camera.z
             );
             ActiveEffect current = effect;
+            if(current.waterAffinity()>1.001F){
+                float scale=1.0F+(current.waterAffinity()-1.0F)*0.70F;
+                poseStack.scale(scale,scale,scale);
+            }
             float time = clamp(progress);
             if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_MESHES_SUBMITTED.add(effect.abilityId())) {
                 System.out.println("[ELEMENTAL_VFX_SMOKE] MESH_SUBMIT " + effect.abilityId());
@@ -222,11 +228,11 @@ public final class TechniqueVisualRenderer {
             case "fire_dragon" -> dragon(fx, t, pose, out);
 
             // TIDE — a continuous moving water sheet, ribbons and ice geometry.
-            case "water_projectile" -> projectile(fx, t, pose, out, 0xFF168DE0, 0xFFB9F5FF, 0.42);
-            case "water_whip" -> whip(fx, t, pose, out, 0xFF168DD8, 0xFFB8F5FF, 2.5);
+            case "water_projectile" -> waterJet(fx,t,pose,out);
+            case "water_whip" -> waterWhip(fx,t,pose,out);
             case "ice_bind" -> iceCage(fx, t, pose, out);
             case "ice_blades" -> iceBlades(fx, t, pose, out);
-            case "water_shield" -> shield(fx, t, pose, out, 0xFF168FD8, 0xFFB8F4FF);
+            case "water_shield" -> waterShield(fx,t,pose,out);
             case "great_wave" -> greatWave(fx, t, pose, out);
 
             // STONE — animated meshes rise from the floor and build defensive forms.
@@ -405,6 +411,101 @@ public final class TechniqueVisualRenderer {
                 ribbon(out, pose, wing, 0.10, 0xFFFFB347);
             }
         }
+    }
+
+    /** Pressurised water lance with a liquid core, helical sheeting and spray wake. */
+    private static void waterJet(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
+        float travel=ease(clamp((t-0.035F)/0.72F));
+        double depth=0.9+travel*6.0;
+        double side=0.62+Math.sin(t*7.5)*0.05;
+        double height=0.22+Math.sin(t*9.0)*0.035;
+        Vec3 head=point(fx,side,height,depth);
+        orb(out,pose,head,0.48,0xB91C9FD8,10,20);
+        orb(out,pose,head,0.29,0xE8D8FBFF,9,18);
+        for(int layer=0;layer<4;layer++){
+            ringOffset(out,pose,fx,side,height,depth-0.48+layer*0.16,
+                    0.28+layer*0.07,layer%2==0?0xD1BDF8FF:0x9F42B9E7,40,-t*4.0+layer*0.45,0.075);
+        }
+        for(int strand=0;strand<7;strand++){
+            List<Vec3> stream=new ArrayList<>();
+            for(int n=0;n<=34;n++){
+                double u=n/34.0;
+                double angle=u*Math.PI*2.6+strand*Math.PI*2.0/7.0-t*7.2;
+                double radius=0.25+0.12*Math.sin(u*Math.PI);
+                stream.add(point(fx,side+Math.cos(angle)*radius,height+Math.sin(angle)*radius,
+                        0.36+u*(depth-0.28)));
+            }
+            ribbon(out,pose,stream,strand==0?0.155:0.105,
+                    strand%2==0?0xDDA4EFFF:0xBAE5FFFF);
+        }
+        for(int drop=0;drop<5;drop++){
+            double u=drop/5.0;
+            Vec3 droplet=point(fx,side+Math.sin(drop*2.2)*0.28,height+Math.cos(drop*1.8)*0.18,
+                    0.52+u*(depth-0.75));
+            orb(out,pose,droplet,0.09+(drop%2)*0.035,0xD9C8F8FF,6,10);
+        }
+        ringOffset(out,pose,fx,side,height,depth-0.72,0.56,0xB7E9FFFF,44,t*2.5,0.055);
+    }
+
+    /** Wide flowing water arc, shaped as a fluid ribbon rather than a generic rope. */
+    private static void waterWhip(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
+        float sweep=ease(clamp((t-0.08F)/0.64F));
+        for(int strand=0;strand<4;strand++){
+            List<Vec3> flow=new ArrayList<>();
+            for(int n=0;n<=34;n++){
+                double u=n/34.0;
+                double angle=-1.52+3.04*u*sweep;
+                double reach=2.45+strand*0.12;
+                double side=Math.sin(angle)*reach;
+                double forward=0.72+Math.cos(angle)*1.48;
+                double crest=0.22+Math.sin(u*Math.PI)*(0.76+strand*0.09)
+                        +Math.sin(u*Math.PI*5.0-t*9.0)*0.055;
+                flow.add(point(fx,side,crest,forward));
+            }
+            ribbon(out,pose,flow,strand==0?0.22:0.105,
+                    strand==0?0xC51D9DDD:(strand%2==0?0xD9B8F7FF:0xA746BCEB));
+        }
+        List<Vec3> brightEdge=new ArrayList<>();
+        for(int n=0;n<=34;n++){
+            double u=n/34.0;
+            double angle=-1.52+3.04*u*sweep;
+            brightEdge.add(point(fx,Math.sin(angle)*2.50,0.26+Math.sin(u*Math.PI)*0.84,
+                    0.72+Math.cos(angle)*1.48));
+        }
+        ribbon(out,pose,brightEdge,0.038,0xF0E9FFFF);
+        for(int i=0;i<7;i++){
+            double u=i/7.0;
+            double angle=-1.52+3.04*u*sweep;
+            Vec3 drop=point(fx,Math.sin(angle)*2.52,0.32+Math.sin(u*Math.PI)*0.9,
+                    0.72+Math.cos(angle)*1.50);
+            orb(out,pose,drop,0.075+(i%3)*0.025,0xD5D7FAFF,6,9);
+        }
+    }
+
+    /** A rotating, fluid shell around the caster with crossing current bands. */
+    private static void waterShield(ActiveEffect fx,float t,PoseStack.Pose pose,VertexConsumer out){
+        float pulse=0.94F+(float)Math.sin(t*Math.PI*6.0)*0.055F;
+        for(int strand=0;strand<8;strand++){
+            List<Vec3> current=new ArrayList<>();
+            for(int n=0;n<=42;n++){
+                double u=n/42.0;
+                double angle=u*Math.PI*2.0+strand*Math.PI/4.0+t*2.8;
+                double latitude=-1.0+u*2.0;
+                double radius=1.0*pulse+0.11*Math.sin(u*Math.PI*4.0+strand+t*5.0);
+                current.add(point(fx,Math.cos(angle)*radius*Math.cos(latitude),
+                        Math.sin(latitude)*1.30,Math.sin(angle)*radius*Math.cos(latitude)));
+            }
+            ribbon(out,pose,current,strand%2==0?0.145:0.095,
+                    strand%2==0?0xC61D9DDD:0xD7B5F6FF);
+        }
+        for(int band=0;band<6;band++){
+            double y=-0.95+band*0.38;
+            double radius=1.08*Math.sqrt(Math.max(0.08,1.0-y*y/1.72));
+            ringAtWide(out,pose,fx,y,radius,band==2||band==3?0xE5E6FFFF:0xA84EBDE8,
+                    64,true,t*(band%2==0?1.9:-1.9),0.105);
+        }
+        ringWide(out,pose,fx,0.0,1.17,0xC9DDFBFF,72,t*1.0,0.10);
+        ringWide(out,pose,fx,0.0,0.88,0xA73BAEDB,72,-t*1.35,0.08);
     }
 
     private static void greatWave(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {

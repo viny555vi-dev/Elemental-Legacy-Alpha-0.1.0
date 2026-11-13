@@ -3,6 +3,8 @@ package dev.elementallegacy.ability;
 import dev.elementallegacy.data.ElementalWorldData;
 import dev.elementallegacy.data.PlayerProgress;
 import dev.elementallegacy.element.Element;
+import dev.elementallegacy.element.WaterAffinity;
+import net.minecraft.tags.BlockTags;
 import dev.elementallegacy.network.AbilityAnimationPayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -49,9 +51,10 @@ public final class ElementalAbilityService {
         // A real vanilla arm swing is synchronized to observers; the impulse adds a visible body action.
         player.swing(InteractionHand.MAIN_HAND,new SwingAnimation(SwingAnimationType.WHACK,9),true);
         applyBodyMotion(player,ability,look);
-        int hits=applyCombat(level,player,ability,origin,look);
+        float waterAffinity=WaterAffinity.forAbility(player,ability.id());
+        int hits=applyCombat(level,player,ability,origin,look,waterAffinity);
         AbilityAnimationPayload.broadcast(player, ability);
-        scheduleTechnique(player,level,ability,origin,look);
+        scheduleTechnique(player,level,ability,origin,look,waterAffinity);
         if(hits>0){
             data.addXp(player.getUUID(),ability.xpReward()*hits);
             return ability.displayName()+" executada! Alvos atingidos: "+hits+". +"+(ability.xpReward()*hits)+" XP.";
@@ -70,22 +73,24 @@ public final class ElementalAbilityService {
         if(impulse.lengthSqr()>0)p.setDeltaMovement(p.getDeltaMovement().add(impulse));
     }
 
-    private static int applyCombat(ServerLevel level,ServerPlayer player,ElementalAbility a,Vec3 origin,Vec3 look){
-        AABB box=player.getBoundingBox().inflate(a.range(),Math.max(3,a.range()*0.55),a.range());
+    private static int applyCombat(ServerLevel level,ServerPlayer player,ElementalAbility a,Vec3 origin,Vec3 look,float waterAffinity){
+        double effectiveRange=a.range()*(1.0D+(waterAffinity-1.0D)*0.28D);
+        AABB box=player.getBoundingBox().inflate(effectiveRange,Math.max(3,effectiveRange*0.55),effectiveRange);
         int hits=0;
         for(LivingEntity target:level.getEntitiesOfClass(LivingEntity.class,box,e->e!=player&&e.isAlive()&&!e.isSpectator())){
             Vec3 offset=target.getBoundingBox().getCenter().subtract(origin);
             double distance=offset.length();
-            if(distance>a.range()||distance<0.01)continue;
+            if(distance>effectiveRange||distance<0.01)continue;
             double alignment=look.dot(offset.normalize());
             boolean radial=switch(a){
                 case AIR_PUSH,AIR_SHIELD,AIR_JUMP,WATER_SHIELD,STONE_ARMOR,FOCUSED_EXPLOSION,EARTHQUAKE,CYCLONE -> true;
                 default -> false;
             };
             if(!radial&&alignment<0.48)continue;
-            if(radial&&distance>Math.min(a.range(),6.5))continue;
+            if(radial&&distance>Math.min(effectiveRange,6.5D*(1.0D+(waterAffinity-1.0D)*0.20D)))continue;
             float damage=a.damage();
             if(a==ElementalAbility.WATER_SHIELD||a==ElementalAbility.AIR_SHIELD||a==ElementalAbility.STONE_ARMOR)damage=8;
+            if(a.element()==Element.TIDE)damage*=1.0F+(waterAffinity-1.0F)*0.55F;
             if(!target.hurtServer(level,player.damageSources().playerAttack(player),damage))continue;
             hits++;
             Vec3 away = target.position().subtract(player.position());
@@ -113,12 +118,109 @@ public final class ElementalAbilityService {
                     if (radial) push = horizontalAway.scale(0.9).add(0.0, 0.35, 0.0);
                 }
             }
+            if(a.element()==Element.TIDE)push=push.scale(1.0D+(waterAffinity-1.0D)*0.72D);
             target.push(push.x, push.y, push.z);
+            if(a.element()==Element.TIDE)tideMobImpact(level,a,target,look,horizontalAway,waterAffinity);
             if (a.element() == Element.GALE) galeMobImpact(level, a, target, look, horizontalAway);
             if(a.element()==Element.EMBER)target.igniteForSeconds(a==ElementalAbility.FIRE_DRAGON?6:3);
             if(a==ElementalAbility.ICE_BIND||a==ElementalAbility.ICE_BLADES)target.setDeltaMovement(target.getDeltaMovement().multiply(0.25,0.35,0.25));
         }
         return hits;
+    }
+
+    /** A nearby body of water visibly feeds Tide techniques with curved source streams. */
+    private static void waterSourceSurge(ServerLevel level,ServerPlayer player,Vec3 hands,float affinity){
+        if(affinity<=1.01F)return;
+        BlockPos center=player.blockPosition();
+        List<BlockPos> sources=new ArrayList<>();
+        for(int x=-6;x<=6;x++)for(int y=-2;y<=2;y++)for(int z=-6;z<=6;z++){
+            BlockPos pos=center.offset(x,y,z);
+            if(!level.hasChunkAt(pos))continue;
+            if(level.getBlockState(pos).getFluidState().is(net.minecraft.tags.FluidTags.WATER))sources.add(pos);
+        }
+        sources.sort(Comparator.comparingDouble(pos->{
+            double dx=pos.getX()+0.5-hands.x,dy=pos.getY()+0.5-hands.y,dz=pos.getZ()+0.5-hands.z;
+            return dx*dx+dy*dy+dz*dz;
+        }));
+        int streams=Math.min(sources.size(),Math.max(1,Math.round((affinity-1.0F)*4.0F)+1));
+        for(int stream=0;stream<streams;stream++){
+            BlockPos source=sources.get(stream);
+            Vec3 from=new Vec3(source.getX()+0.5,source.getY()+0.5,source.getZ()+0.5);
+            for(int step=0;step<=6;step++){
+                double t=step/6.0;
+                Vec3 point=from.lerp(hands,t).add(0,Math.sin(t*Math.PI)*0.55,0);
+                emit(level,ParticleTypes.SPLASH,point,3,0.045,0.045,0.045,0.055);
+                if(step%2==0)emit(level,ParticleTypes.BUBBLE,point,2,0.035,0.035,0.035,0.025);
+            }
+        }
+    }
+
+    /** Water techniques leave a distinct pressure-and-surge reaction on hit targets. */
+    private static void tideMobImpact(ServerLevel level,ElementalAbility ability,LivingEntity target,
+                                      Vec3 look,Vec3 away,float affinity){
+        Vec3 center=target.position().add(0,target.getBbHeight()*0.52,0);
+        int extra=Math.max(0,Math.round((affinity-1.0F)*10.0F));
+        switch(ability){
+            case WATER_PROJECTILE -> {
+                emit(level,ParticleTypes.SPLASH,center,26+extra,0.26,0.28,0.26,0.12);
+                emit(level,ParticleTypes.BUBBLE,center,14+extra/2,0.18,0.20,0.18,0.07);
+                mobWindRing(level,center,0.58+(affinity-1.0F)*0.35,28,0.08,ParticleTypes.SPLASH);
+            }
+            case WATER_WHIP -> {
+                Vec3 tangent=new Vec3(-away.z,0,away.x);
+                for(int slash=-2;slash<=2;slash++){
+                    Vec3 point=center.add(tangent.scale(slash*0.22));
+                    emit(level,ParticleTypes.SWEEP_ATTACK,point,2,0.05,0.15,0.05,0.12);
+                    emit(level,ParticleTypes.SPLASH,point,5+extra/4,0.07,0.11,0.07,0.075);
+                }
+            }
+            case ICE_BIND -> {
+                emit(level,ParticleTypes.SNOWFLAKE,center,28+extra,0.24,0.38,0.24,0.025);
+                emit(level,ParticleTypes.POOF,center,10,0.18,0.22,0.18,0.025);
+                mobWindRing(level,center,0.54,24,0.04,ParticleTypes.SNOWFLAKE);
+            }
+            case ICE_BLADES -> {
+                emit(level,ParticleTypes.SWEEP_ATTACK,center,7,0.24,0.26,0.24,0.12);
+                emit(level,ParticleTypes.SNOWFLAKE,center,24+extra,0.28,0.26,0.28,0.035);
+                emit(level,ParticleTypes.CRIT,center,10,0.20,0.24,0.20,0.10);
+            }
+            case WATER_SHIELD -> {
+                mobWindRing(level,center,0.76+(affinity-1.0F)*0.45,32,0.10,ParticleTypes.SPLASH);
+                emit(level,ParticleTypes.BUBBLE,center,20+extra,0.35,0.40,0.35,0.06);
+            }
+            case GREAT_WAVE -> {
+                emit(level,ParticleTypes.SPLASH,center,44+extra*2,0.48,0.42,0.48,0.18);
+                emit(level,ParticleTypes.BUBBLE,center,28+extra,0.38,0.42,0.38,0.10);
+                mobWindRing(level,center.add(0,-0.36,0),1.0+(affinity-1.0F)*0.7,40,0.12,ParticleTypes.SPLASH);
+                mobWindRing(level,center.add(0,0.42,0),0.72+(affinity-1.0F)*0.5,32,0.08,ParticleTypes.BUBBLE);
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** Great Wave clears only light natural obstructions; it does not erase player-built walls. */
+    private static void waterWaveTerrainImpact(ServerLevel level,ServerPlayer player,Vec3 origin,
+                                               Vec3 forward,Vec3 right,float affinity){
+        int reach=8+(int)Math.round((affinity-1.0F)*4.0F);
+        int halfWidth=3+(int)Math.floor((affinity-1.0F)*2.0F);
+        for(int step=1;step<=reach;step++){
+            for(int side=-halfWidth;side<=halfWidth;side++){
+                for(int y=-2;y<=1;y++){
+                    BlockPos pos=BlockPos.containing(origin.add(forward.scale(step))
+                            .add(right.scale(side*0.68)).add(0,y,0));
+                    if(!level.hasChunkAt(pos))continue;
+                    BlockState state=level.getBlockState(pos);
+                    boolean fragile=state.is(BlockTags.LEAVES)||state.is(BlockTags.FLOWERS)
+                            ||state.is(BlockTags.SAPLINGS)||state.is(BlockTags.CROPS)
+                            ||state.is(Blocks.SHORT_GRASS)||state.is(Blocks.TALL_GRASS)
+                            ||state.is(Blocks.FERN)||state.is(Blocks.LARGE_FERN)
+                            ||state.is(Blocks.DEAD_BUSH)||state.is(Blocks.SUGAR_CANE)
+                            ||state.is(Blocks.SNOW);
+                    if(fragile)level.destroyBlock(pos,true,player);
+                }
+            }
+        }
     }
 
     /**
@@ -203,7 +305,7 @@ public final class ElementalAbilityService {
     }
 
     // Keeps visual effects server-authoritative so every nearby player sees the same action.
-    private static void scheduleTechnique(ServerPlayer player,ServerLevel level,ElementalAbility a,Vec3 origin,Vec3 look){
+    private static void scheduleTechnique(ServerPlayer player,ServerLevel level,ElementalAbility a,Vec3 origin,Vec3 look,float waterAffinity){
         UUID id=player.getUUID();
         Vec3 right=look.cross(new Vec3(0,1,0)).normalize();
         if(right.lengthSqr()<0.001)right=new Vec3(1,0,0);
@@ -217,6 +319,7 @@ public final class ElementalAbilityService {
         cues.add(new ScheduledCue(0,()->{
             emitElement(level,a.element(),hands,32,0.34,0.36,0.34,0.045);
             emit(level,ParticleTypes.ENCHANT,hands,8,0.22,0.22,0.22,0.07);
+            if(a.element()==Element.TIDE)waterSourceSurge(level,player,hands,waterAffinity);
         }));
         cues.add(new ScheduledCue(3,()->{
             ring(level,a.element(),hands,0.62,28);
@@ -239,7 +342,7 @@ public final class ElementalAbilityService {
         for(int segment=1;segment<=9;segment++){
             final int step=segment;
             cues.add(new ScheduledCue(6+step*2,()->renderTechniqueSegment(
-                    level,a,origin,look,rightBasis,upBasis,step)));
+                    level,player,a,origin,look,rightBasis,upBasis,step,waterAffinity)));
         }
         cues.add(new ScheduledCue(27,()->{
             Vec3 impactPoint=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
@@ -260,8 +363,8 @@ public final class ElementalAbilityService {
     }
 
     /** Emit one moving slice of a technique per server tick pair, not the whole trail in one frame. */
-    private static void renderTechniqueSegment(ServerLevel level,ElementalAbility ability,Vec3 origin,
-                                               Vec3 forward,Vec3 right,Vec3 up,int segment){
+    private static void renderTechniqueSegment(ServerLevel level,ServerPlayer player,ElementalAbility ability,Vec3 origin,
+                                               Vec3 forward,Vec3 right,Vec3 up,int segment,float waterAffinity){
         double t=segment/9.0D;
         Vec3 start=origin.add(forward.scale(0.45)).add(0,-0.28,0);
         switch(ability.id()){
@@ -342,6 +445,8 @@ public final class ElementalAbilityService {
                 emitElement(level,ability.element(),point,18,0.22,0.22,0.22,0.035);
             }
         }
+        if(ability==ElementalAbility.GREAT_WAVE&&segment==9)
+            waterWaveTerrainImpact(level,player,origin,forward,right,waterAffinity);
     }
 
     private static void renderSignature(ServerLevel l,ElementalAbility a,Vec3 o,Vec3 f,Vec3 r,Vec3 u){
