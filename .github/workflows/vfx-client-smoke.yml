@@ -134,6 +134,8 @@ jobs:
                   "time set day",
                   "weather clear",
                   "gamemode creative Dev",
+                  # Stable pool beside the caster: the water_projectile sample validates proximity affinity.
+                  "execute at Dev run fill ~1 ~-1 ~-3 ~6 ~-1 ~3 minecraft:water",
               ]
               for index, command in enumerate(commands, 10):
                   sock.sendall(packet(index, 2, command))
@@ -301,6 +303,21 @@ jobs:
               echo "Not all 24 techniques passed the arm, torso, stance and distinctness checks."
               exit 25
             fi
+
+            NEAR_WATER_LINE=$(grep -m1 "WATER_AFFINITY water_projectile " "$RUNNER_TEMP/client.log" || true)
+            NEAR_WATER_VALUE=$(echo "$NEAR_WATER_LINE" | sed -E 's/.* value=([0-9.]+).*/\1/')
+            if [ -z "$NEAR_WATER_VALUE" ] || ! awk -v value="$NEAR_WATER_VALUE" 'BEGIN { exit !(value > 1.10) }'; then
+              echo "Water proximity affinity was not validated above the dry baseline: $NEAR_WATER_LINE"
+              exit 26
+            fi
+            for ability in water_whip ice_bind ice_blades water_shield great_wave; do
+              if ! grep -q "WATER_AFFINITY $ability value=1.900 swimming=true" "$RUNNER_TEMP/client.log"; then
+                echo "Swimming affinity was not validated for $ability."
+                exit 27
+              fi
+            done
+            echo "Water affinity validated: near-water=$NEAR_WATER_VALUE; swimming=1.900 for all five remaining Tide meshes."
+
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
             fi
