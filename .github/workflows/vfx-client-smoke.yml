@@ -305,8 +305,8 @@ jobs:
             fi
 
             NEAR_WATER_LINE=$(grep -m1 "WATER_AFFINITY water_projectile " "$RUNNER_TEMP/client.log" || true)
-            NEAR_WATER_VALUE=$(echo "$NEAR_WATER_LINE" | sed -E 's/.* value=([0-9.]+).*/\1/')
-            if [ -z "$NEAR_WATER_VALUE" ] || ! awk -v value="$NEAR_WATER_VALUE" 'BEGIN { exit !(value > 1.10) }'; then
+            NEAR_WATER_VALUE=$(echo "$NEAR_WATER_LINE" | sed -E "s/.* value=([0-9.]+).*/\\1/")
+            if [ -z "$NEAR_WATER_VALUE" ] || ! awk -v value="$NEAR_WATER_VALUE" "BEGIN { exit !(value > 1.10) }"; then
               echo "Water proximity affinity was not validated above the dry baseline: $NEAR_WATER_LINE"
               exit 26
             fi
@@ -321,8 +321,8 @@ jobs:
               fi
             done
             NEAR_WATER_POSE=$(grep -m1 "PLAYER_ANIMATION_WATER_AFFINITY water_projectile " "$RUNNER_TEMP/client.log" || true)
-            NEAR_WATER_POSE_VALUE=$(echo "$NEAR_WATER_POSE" | sed -E 's/.* value=([0-9.]+).*/\1/')
-            if [ -z "$NEAR_WATER_POSE_VALUE" ] || ! awk -v value="$NEAR_WATER_POSE_VALUE" 'BEGIN { exit !(value > 1.10) }'; then
+            NEAR_WATER_POSE_VALUE=$(echo "$NEAR_WATER_POSE" | sed -E "s/.* value=([0-9.]+).*/\\1/")
+            if [ -z "$NEAR_WATER_POSE_VALUE" ] || ! awk -v value="$NEAR_WATER_POSE_VALUE" "BEGIN { exit !(value > 1.10) }"; then
               echo "Water proximity affinity was not applied to the player pose: $NEAR_WATER_POSE"
               exit 29
             fi
