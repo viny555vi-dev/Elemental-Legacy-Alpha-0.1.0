@@ -189,11 +189,13 @@ public final class TechniqueVisualRenderer {
             smokeNextTick = mc.player.tickCount + 80;
         }
         if (smokeIndex >= SMOKE_ABILITIES.length) {
-            if (!smokeFinishedLogged) {
+            boolean complete = SMOKE_MESHES_SUBMITTED.size() == SMOKE_ABILITIES.length
+                    && PlayerAbilityAnimator.hasCompleteSmokeEvidence();
+            if (!smokeFinishedLogged && complete) {
                 smokeFinishedLogged = true;
                 if (mc.gui.hud.isHidden() != smokeOriginalHudHidden) mc.gui.hud.toggle();
                 System.out.println("[ELEMENTAL_VFX_SMOKE] HUD_RESTORED " + mc.gui.hud.isHidden());
-                System.out.println("[ELEMENTAL_VFX_SMOKE] COMPLETED: all 24 techniques rendered.");
+                System.out.println("[ELEMENTAL_VFX_SMOKE] COMPLETED: all 24 techniques rendered with 120/120 pose samples.");
             }
             return;
         }

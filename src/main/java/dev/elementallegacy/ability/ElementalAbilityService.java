@@ -516,8 +516,7 @@ public final class ElementalAbilityService {
             case STONE_WALL -> {
                 for(int x=-3;x<=3;x++)for(int y=0;y<5;y++){
                     Vec3 p=o.add(f.scale(2.8)).add(r.scale(x*0.42)).add(0,y*0.42-0.6,0);
-                    emit(l,ParticleTypes.POOF,p,5,0.12,0.12,0.12,0.02);
-                    debris(l,p,Element.STONE,4);
+                    debris(l,p,Element.STONE,8);
                 }
             }
             case AIR_PUSH -> {
@@ -539,7 +538,7 @@ public final class ElementalAbilityService {
         switch(a.element()){
             case EMBER -> {emit(l,ParticleTypes.FLAME,p,42,0.72,0.62,0.72,0.12);emit(l,ParticleTypes.LAVA,p,8,0.35,0.3,0.35,0.04);emit(l,ParticleTypes.LARGE_SMOKE,p,15,0.45,0.3,0.45,0.035);}
             case TIDE -> {emit(l,ParticleTypes.SPLASH,p,48,0.85,0.65,0.85,0.16);emit(l,ParticleTypes.BUBBLE,p,22,0.5,0.4,0.5,0.06);}
-            case STONE -> {emit(l,ParticleTypes.POOF,p,38,0.8,0.25,0.8,0.11);emit(l,ParticleTypes.CRIT,p,24,0.7,0.45,0.7,0.14);}
+            case STONE -> emitElement(l, Element.STONE, p, 30, 0.65, 0.22, 0.65, 0.10);
             case GALE -> {
                 emit(l,ParticleTypes.CLOUD,p,42,0.8,0.65,0.8,0.12);
                 emit(l,ParticleTypes.POOF,p,20,0.55,0.4,0.55,0.07);
@@ -591,7 +590,16 @@ public final class ElementalAbilityService {
         switch(e){
             case EMBER -> {emit(l,ParticleTypes.FLAME,p,n,dx,dy,dz,speed);emit(l,ParticleTypes.SMOKE,p,Math.max(1,n/4),dx*0.7,dy*0.7,dz*0.7,speed*0.3);}
             case TIDE -> {emit(l,ParticleTypes.SPLASH,p,n,dx,dy,dz,speed);emit(l,ParticleTypes.BUBBLE,p,Math.max(1,n/3),dx*0.7,dy*0.7,dz*0.7,speed*0.3);}
-            case STONE -> {emit(l,ParticleTypes.POOF,p,n,dx,dy,dz,speed);emit(l,ParticleTypes.CRIT,p,Math.max(1,n/3),dx*0.7,dy*0.7,dz*0.7,speed);}
+            case STONE -> {
+                BlockPos source = BlockPos.containing(p.x, p.y - 0.2D, p.z);
+                BlockState material = l.getBlockState(source);
+                if (material.isAir()) material = l.getBlockState(source.below());
+                if (material.isAir()) material = Blocks.STONE.defaultBlockState();
+                ParticleOptions fragments = new BlockParticleOption(ParticleTypes.BLOCK, material);
+                emit(l, fragments, p, Math.max(1, n / 2), dx, dy, dz, speed);
+                emit(l, ParticleTypes.CRIT, p, Math.max(1, n / 8),
+                        dx * 0.45, dy * 0.45, dz * 0.45, speed * 0.6);
+            }
             case GALE -> {emit(l,ParticleTypes.CLOUD,p,n,dx,dy,dz,speed);emit(l,ParticleTypes.SWEEP_ATTACK,p,Math.max(1,n/4),dx*0.7,dy*0.7,dz*0.7,speed*0.2);}
         }
     }

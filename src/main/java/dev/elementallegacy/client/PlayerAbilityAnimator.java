@@ -61,6 +61,20 @@ public final class PlayerAbilityAnimator {
         SMOKE_NEUTRAL_POSE = null;
     }
 
+    /** True only after every smoke technique has five captured pose samples and a distinct articulated pose. */
+    public static boolean hasCompleteSmokeEvidence() {
+        if (SMOKE_MODEL_POSES_VERIFIED.size() != 24
+                || SMOKE_POSE_SAMPLE_BUCKETS.size() != 24) {
+            return false;
+        }
+        for (Set<Integer> samples : SMOKE_POSE_SAMPLE_BUCKETS.values()) {
+            if (samples.size() != 5 || !samples.containsAll(Set.of(0, 1, 2, 3, 4))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static void start(int entityId, String abilityId) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || ElementalAbility.byId(abilityId).isEmpty()) return;
