@@ -659,32 +659,39 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockProjectiles(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp((t - 0.035F) / 0.62F));
+        // Keep the three boulders above and outside the caster silhouette in rear view.
+        // The old low, tightly packed lanes were hidden behind the avatar in the smoke capture.
+        float travel = ease(clamp((t - 0.025F) / 0.78F));
         for (int i = 0; i < 3; i++) {
-            double z = 0.92 + travel * 4.55 + i * 0.22;
-            double side = (i - 1) * 0.88 + Math.sin(t * 7.2 + i) * 0.10;
-            double height = 0.38 + Math.sin(t * 8.5 + i * 1.7) * 0.13;
+            double lane = i - 1;
+            double z = 0.82 + travel * 3.85 + i * 0.18;
+            double side = lane * 1.24 + Math.sin(t * 6.4 + i * 0.9) * 0.12;
+            double height = 1.02 + (1 - Math.abs(lane)) * 0.28
+                    + Math.sin(t * 7.0 + i * 1.4) * 0.12;
             Vec3 center = point(fx, side, height, z);
-            double radius = 0.48 + (i == 1 ? 0.10 : 0.0);
-            facetedRock(out, pose, fx, center, radius, 0.66, t * 3.0 + i * 1.25, i);
+            double radius = 0.66 + (i == 1 ? 0.12 : 0.0);
+            facetedRock(out, pose, fx, center, radius, 0.88, t * 3.8 + i * 1.25, i);
 
             List<Vec3> wake = new ArrayList<>();
-            for (int segment = 0; segment <= 8; segment++) {
-                double u = segment / 8.0D;
-                wake.add(point(fx,
-                        side * (0.78 + u * 0.12) + Math.sin(t * 8.0 + u * 4.0 + i) * 0.08,
-                        height - 0.10 + u * 0.08,
-                        z - 0.18 - u * 1.05));
+            for (int segment = 0; segment <= 10; segment++) {
+                double u = segment / 10.0D;
+                double wakeSide = side * (0.78 + u * 0.14)
+                        + Math.sin(t * 7.0 + u * 4.2 + i) * 0.10;
+                double wakeHeight = height - 0.18 + u * 0.16
+                        + Math.sin(u * Math.PI) * 0.18;
+                double wakeForward = z - 0.16 - u * 1.30;
+                wake.add(point(fx, wakeSide, wakeHeight, wakeForward));
             }
-            ribbon(out, pose, wake, 0.12, 0xFF8D765B);
-            ribbon(out, pose, wake, 0.045, 0xFFD5BE98);
+            ribbon(out, pose, wake, 0.17, 0xFF76634D);
+            ribbon(out, pose, wake, 0.065, 0xFFD8C19A);
 
-            for (int chip = 0; chip < 3; chip++) {
-                Vec3 fragment = center.add(fx.right().scale((chip - 1) * 0.30))
-                        .add(0.0, (chip - 1) * 0.16, 0.0)
-                        .add(fx.forward().scale(-0.22 - chip * 0.12));
-                facetedRock(out, pose, fx, fragment, 0.13, 0.20,
-                        -t * 4.0 + chip, 4 + chip);
+            for (int chip = 0; chip < 4; chip++) {
+                double chipSide = (chip - 1.5) * 0.24;
+                Vec3 fragment = center.add(fx.right().scale(chipSide))
+                        .add(0.0, (chip % 2 == 0 ? 0.22 : -0.18), 0.0)
+                        .add(fx.forward().scale(-0.30 - chip * 0.10));
+                facetedRock(out, pose, fx, fragment, 0.16, 0.24,
+                        -t * 4.6 + chip, 4 + chip);
             }
         }
     }
