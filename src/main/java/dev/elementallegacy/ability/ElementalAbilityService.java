@@ -516,7 +516,7 @@ public final class ElementalAbilityService {
             case STONE_WALL -> {
                 for(int x=-3;x<=3;x++)for(int y=0;y<5;y++){
                     Vec3 p=o.add(f.scale(2.8)).add(r.scale(x*0.42)).add(0,y*0.42-0.6,0);
-                    debris(l,p,Element.STONE,8);
+                    debris(l,p,Element.STONE,3);
                 }
             }
             case AIR_PUSH -> {
@@ -581,8 +581,8 @@ public final class ElementalAbilityService {
     private static void debris(ServerLevel l,Vec3 p,Element e,int count){
         BlockPos pos=BlockPos.containing(p.x,p.y-0.2,p.z);
         BlockState state=l.getBlockState(pos);
-        if(state.isAir())state=l.getBlockState(pos.below());
-        if(state.isAir())return;
+        if(!state.isSolid())state=l.getBlockState(pos.below());
+        if(!state.isSolid())state=Blocks.STONE.defaultBlockState();
         ParticleOptions dust=new BlockParticleOption(ParticleTypes.BLOCK,state);
         emit(l,dust,p,count,0.55,0.32,0.55,0.12);
     }
@@ -593,8 +593,8 @@ public final class ElementalAbilityService {
             case STONE -> {
                 BlockPos source = BlockPos.containing(p.x, p.y - 0.2D, p.z);
                 BlockState material = l.getBlockState(source);
-                if (material.isAir()) material = l.getBlockState(source.below());
-                if (material.isAir()) material = Blocks.STONE.defaultBlockState();
+                if (!material.isSolid()) material = l.getBlockState(source.below());
+                if (!material.isSolid()) material = Blocks.STONE.defaultBlockState();
                 ParticleOptions fragments = new BlockParticleOption(ParticleTypes.BLOCK, material);
                 emit(l, fragments, p, Math.max(1, n / 2), dx, dy, dz, speed);
                 emit(l, ParticleTypes.CRIT, p, Math.max(1, n / 8),
@@ -623,7 +623,7 @@ public final class ElementalAbilityService {
         BlockPos surface = surfaceBlock(level, point);
         if (!level.hasChunkAt(surface)) return;
         BlockState ground = level.getBlockState(surface.below());
-        if (ground.isAir()) return;
+        if (!ground.isSolid()) ground = Blocks.STONE.defaultBlockState();
         ParticleOptions fragments = new BlockParticleOption(ParticleTypes.BLOCK, ground);
         Vec3 origin = new Vec3(surface.getX() + 0.5D, surface.getY() + 0.06D, surface.getZ() + 0.5D);
         emit(level, fragments, origin, count, 0.34, 0.12, 0.34, 0.16);

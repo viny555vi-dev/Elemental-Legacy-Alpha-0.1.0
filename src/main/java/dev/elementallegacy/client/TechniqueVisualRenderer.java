@@ -1089,50 +1089,51 @@ public final class TechniqueVisualRenderer {
         ringAtWide(out, pose, fx, -0.78, 0.58 + lift * 0.65, 0xE2F3FFFC, 64, true, t * 3.5, 0.11);
         ringAtWide(out, pose, fx, -0.66, 1.02 + lift * 0.48, 0xC17BE7D8, 64, true, -t * 2.4, 0.09);
 
-        // Nine broad rising corkscrews create a powerful lift column beneath the body.
-        for (int strand = 0; strand < 9; strand++) {
+        // Seven separated corkscrews leave an open center so the caster remains visible.
+        for (int strand = 0; strand < 7; strand++) {
             List<Vec3> column = new ArrayList<>();
             for (int n = 0; n <= 40; n++) {
                 double u = n / 40.0;
-                double angle = u * Math.PI * 3.8 + strand * Math.PI * 2.0 / 9.0 - t * 5.8;
-                double radius = 0.28 + u * 0.80 + 0.10 * Math.sin(u * Math.PI * 4.0 + t * 7.0);
+                double angle = u * Math.PI * 3.8 + strand * Math.PI * 2.0 / 7.0 - t * 5.8;
+                double radius = 0.78 + u * 0.58 + 0.07 * Math.sin(u * Math.PI * 4.0 + t * 7.0);
                 column.add(point(fx,
                         Math.cos(angle) * radius,
                         -0.72 + u * (2.75 + lift * 1.45),
                         Math.sin(angle) * radius));
             }
-            ribbon(out, pose, column, strand == 0 ? 0.17 : 0.105,
-                    strand % 2 == 0 ? 0xE7F9FFFC : 0xC477E6DA);
+            ribbon(out, pose, column, strand == 0 ? 0.085 : 0.065,
+                    strand % 2 == 0 ? 0xD9F9FFFC : 0xB877E6DA);
         }
         for (int i = 0; i < 5; i++) {
             double u = i / 4.0;
             ringAtWide(out, pose, fx, -0.45 + u * (1.45 + lift * 1.8),
-                    0.42 + u * 0.62, 0xB6E6FFF5, 52, true, t * 4.0 + i, 0.085);
+                    0.78 + u * 0.55, 0xAEE6FFF5, 52, true, t * 4.0 + i, 0.065);
         }
-        orb(out, pose, point(fx, 0, 1.12 + lift * 0.35, 0), 0.34, 0xD5E9FFF6, 9, 20);
+        orb(out, pose, point(fx, 0, 1.12 + lift * 0.35, 0.78), 0.28, 0xBFE9FFF6, 9, 20);
     }
 
     private static void airDash(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out,
                                 int outer, int inner) {
         float dash = ease(clamp((t - 0.035F) / 0.17F))
                 * (1.0F - ease(clamp((t - 0.68F) / 0.27F)));
-        double length = 0.55 + dash * 7.6;
+        double length = 0.55 + dash * 6.2;
 
-        // Nine thick streamlines stretch behind a streamlined, low-profile flying body.
-        for (int lane = -4; lane <= 4; lane++) {
+        // Six narrow side streamlines leave a clear centerline for the player's body.
+        for (int lane = -3; lane <= 3; lane++) {
+            if (lane == 0) continue;
             List<Vec3> trail = new ArrayList<>();
             for (int i = 0; i <= 34; i++) {
                 double u = i / 34.0;
                 double wave = Math.sin(u * Math.PI * 2.0 + t * 8.5 + lane * 0.42);
-                double side = lane * 0.14 * (0.4 + u) + wave * 0.11;
-                double up = -0.03 + Math.cos(u * Math.PI * 2.0 + t * 7.5) * 0.12;
+                double side = Math.copySign(0.42 + Math.abs(lane) * 0.16, lane) + wave * 0.06;
+                double up = -0.03 + Math.cos(u * Math.PI * 2.0 + t * 7.5) * 0.10;
                 trail.add(point(fx, side, up, 0.50 - u * length));
             }
-            ribbon(out, pose, trail, lane == 0 ? 0.22 : 0.125, outer);
-            if (lane == 0 || lane == -2 || lane == 2) ribbon(out, pose, trail, 0.055, inner);
+            ribbon(out, pose, trail, 0.072, outer);
+            if (Math.abs(lane) == 1) ribbon(out, pose, trail, 0.038, inner);
         }
 
-        // Six curved vanes wrap the torso and peel away into the wake like pressure wings.
+        // Curved pressure vanes stay outside the torso and peel forward like open wings.
         for (int sideSign : new int[]{-1, 1}) {
             for (int layer = 0; layer < 3; layer++) {
                 List<Vec3> vane = new ArrayList<>();
@@ -1140,15 +1141,15 @@ public final class TechniqueVisualRenderer {
                     double u = i / 26.0;
                     double angle = u * Math.PI * 1.15 + t * 7.0 + layer * 0.75;
                     vane.add(point(fx,
-                            sideSign * (0.18 + Math.cos(angle) * (0.55 + layer * 0.22)),
-                            -0.18 + Math.sin(angle) * (0.42 + layer * 0.13),
-                            0.32 + u * (1.15 + dash * 1.8)));
+                            sideSign * (0.58 + Math.cos(angle) * (0.28 + layer * 0.10)),
+                            -0.18 + Math.sin(angle) * (0.35 + layer * 0.10),
+                            0.32 + u * (0.95 + dash * 1.4)));
                 }
-                ribbon(out, pose, vane, 0.095, inner);
+                ribbon(out, pose, vane, 0.065, inner);
             }
         }
-        ringAtWide(out, pose, fx, -0.12, 0.52 + dash * 0.92, 0xE0F5FFFA, 56, true, t * 7.0, 0.10);
-        ringAtWide(out, pose, fx, 0.48, 0.32 + dash * 0.62, 0xB678E6D9, 52, true, -t * 5.0, 0.085);
+        ringAtWide(out, pose, fx, -0.12, 0.62 + dash * 0.55, 0xD5F5FFFA, 56, true, t * 7.0, 0.075);
+        ringAtWide(out, pose, fx, 0.48, 0.46 + dash * 0.42, 0xA678E6D9, 52, true, -t * 5.0, 0.065);
     }
 
     private static void cyclone(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
