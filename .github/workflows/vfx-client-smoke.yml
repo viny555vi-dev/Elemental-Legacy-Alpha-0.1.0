@@ -90,7 +90,7 @@ jobs:
           ALSOFT_DRIVERS: 'null'
         run: |
           cat > "$RUNNER_TEMP/rcon_smoke.py" <<'PY'
-          import os, pathlib, re, socket, struct, time
+          import os, pathlib, re, socket, struct, subprocess, time
 
           def read_packet(sock):
               header = sock.recv(4)
@@ -142,17 +142,51 @@ jobs:
                   response_id, _, response = read_packet(sock)
                   print(f"RCON {command}: {response}")
 
-              # Wait for the complete pose timeline, not just the final technique's start marker.
+              # Prepare a real water volume only when the client reaches the Tide swim phase.
               client_log = pathlib.Path(os.environ["RUNNER_TEMP"]) / "client.log"
               sample_pattern = re.compile(r"PLAYER_MODEL_POSE_SAMPLE ([a-z0-9_]+) sample=(\d+)/5\b")
               deadline = time.time() + 160
               complete = False
               samples = {}
+              water_setup_sent = False
+              water_keys_down = False
+              water_cleanup_sent = False
+              rcon_request_id = 200
               while time.time() < deadline:
                   try:
                       client_text = client_log.read_text(errors="replace")
                   except FileNotFoundError:
                       client_text = ""
+
+                  if "WATER_SWIM_SETUP_REQUIRED" in client_text and not water_setup_sent:
+                      command = "execute at Dev run fill ~-8 ~ ~-8 ~8 ~1 ~8 minecraft:water"
+                      sock.sendall(packet(rcon_request_id, 2, command))
+                      _, _, response = read_packet(sock)
+                      print(f"RCON real swimming pool: {response}")
+                      rcon_request_id += 1
+                      subprocess.run(["xdotool", "keydown", "ctrl", "keydown", "w"], check=True)
+                      water_keys_down = True
+                      water_setup_sent = True
+
+                  if "WATER_SWIM_CONFIRMED swimming=true inWater=true" in client_text and water_keys_down:
+                      subprocess.run(["xdotool", "keyup", "w", "keyup", "ctrl"], check=True)
+                      water_keys_down = False
+                      print("Client confirmed native swimming while intersecting real water blocks.")
+
+                  if "WATER_SWIM_SETUP_FAILED" in client_text:
+                      raise RuntimeError("Client failed to enter real swimming state inside the water volume.")
+
+                  if "WATER_SWIM_TEST_COMPLETE" in client_text and not water_cleanup_sent:
+                      if water_keys_down:
+                          subprocess.run(["xdotool", "keyup", "w", "keyup", "ctrl"], check=False)
+                          water_keys_down = False
+                      command = "execute at Dev run fill ~-10 ~ ~-10 ~10 ~1 ~10 minecraft:air"
+                      sock.sendall(packet(rcon_request_id, 2, command))
+                      _, _, response = read_packet(sock)
+                      print(f"RCON restore temporary swim pool: {response}")
+                      rcon_request_id += 1
+                      water_cleanup_sent = True
+
                   samples = {}
                   for ability, sample_text in sample_pattern.findall(client_text):
                       samples.setdefault(ability, set()).add(int(sample_text))
@@ -162,6 +196,8 @@ jobs:
                       and all(indices == {1, 2, 3, 4, 5} for indices in samples.values())
                   )
                   if complete:
+                      if not water_setup_sent or not water_cleanup_sent:
+                          raise RuntimeError("The 24-technique run completed without a verified real-water swim phase and cleanup.")
                       break
                   time.sleep(1)
               if not complete:
@@ -259,7 +295,9 @@ jobs:
           for index, ability in enumerate(ability_order, 1):
               for sample_index in range(1, 6):
                   pose_ms, progress, camera = samples_by_ability[ability][sample_index]
-                  video_time = (pose_ms - capture_start_ms) / 1000.0 + 0.10
+                  # RenderPlayerEvent.Post timestamps identify the pose frame; adding a delay
+              # can cross into the next technique or the server-authoritative pass.
+              video_time = (pose_ms - capture_start_ms) / 1000.0
                   if video_time < 0:
                       raise SystemExit(
                           f"Invalid video offset for {ability} sample {sample_index}: {video_time:.3f}s"
@@ -364,9 +402,25 @@ jobs:
             export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
 
-            date +%s%3N > "$RUNNER_TEMP/capture-start-ms.txt"
-            ffmpeg -y -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 260 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
+            ffmpeg -y -stats_period 0.05 -progress "$RUNNER_TEMP/ffmpeg-progress.txt" -nostats -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 260 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
+            for i in $(seq 1 100); do
+              if grep -Eq "^frame=[1-9]" "$RUNNER_TEMP/ffmpeg-progress.txt" 2>/dev/null; then
+                break
+              fi
+              if ! kill -0 "$CAPTURE_PID" 2>/dev/null; then
+                cat "$RUNNER_TEMP/ffmpeg.log"
+                exit 1
+              fi
+              sleep 0.05
+            done
+            if ! grep -Eq "^frame=[1-9]" "$RUNNER_TEMP/ffmpeg-progress.txt" 2>/dev/null; then
+              echo "FFmpeg did not capture its first frame; refusing to create uncalibrated screenshots."
+              cat "$RUNNER_TEMP/ffmpeg.log"
+              exit 1
+            fi
+            CAPTURE_START_MS=$(date +%s%3N)
+            echo $((CAPTURE_START_MS - 50)) > "$RUNNER_TEMP/capture-start-ms.txt"
             timeout 260s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
 
@@ -440,13 +494,21 @@ jobs:
               echo "Water proximity affinity was not validated above the dry baseline: $NEAR_WATER_LINE"
               exit 26
             fi
+            if ! grep -q "WATER_SWIM_CONFIRMED swimming=true inWater=true" "$RUNNER_TEMP/client.log"; then
+              echo "The client did not confirm swimming while intersecting real water blocks."
+              exit 27
+            fi
+            if ! grep -q "WATER_SWIM_TEST_COMPLETE" "$RUNNER_TEMP/client.log"; then
+              echo "The real-water swimming phase did not complete."
+              exit 28
+            fi
             for ability in water_whip ice_bind ice_blades water_shield great_wave; do
-              if ! grep -q "WATER_AFFINITY $ability value=1.900 swimming=true" "$RUNNER_TEMP/client.log"; then
-                echo "Swimming mesh affinity was not validated for $ability."
+              if ! grep -q "WATER_AFFINITY $ability value=1.900 swimming=true .*inWater=true" "$RUNNER_TEMP/client.log"; then
+                echo "Swimming mesh affinity was not validated inside water for $ability."
                 exit 27
               fi
-              if ! grep -q "PLAYER_ANIMATION_WATER_AFFINITY $ability value=1.900 swimming=true" "$RUNNER_TEMP/client.log"; then
-                echo "Swimming pose affinity was not validated for $ability."
+              if ! grep -q "PLAYER_ANIMATION_WATER_AFFINITY $ability value=1.900 swimming=true inWater=true" "$RUNNER_TEMP/client.log"; then
+                echo "Swimming pose affinity was not validated inside water for $ability."
                 exit 28
               fi
             done

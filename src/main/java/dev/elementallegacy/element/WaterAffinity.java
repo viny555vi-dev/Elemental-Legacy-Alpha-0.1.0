@@ -16,7 +16,8 @@ public final class WaterAffinity {
         return fromEnvironment(entity);
     }
     public static float fromEnvironment(Entity entity){
-        if(entity.isSwimming())return 1.90F;
+        // A swimming flag by itself is not enough: the entity must physically intersect water.
+        if(entity.isSwimming() && entity.isInWater())return 1.90F;
         if(entity.isUnderWater())return 1.72F;
         if(entity.isInWater())return 1.52F;
         Level level=entity.level();

@@ -85,6 +85,12 @@ public final class TechniqueVisualRenderer {
     private static String pendingSmokeAbility;
     private static boolean smokeFinishedLogged;
     private static boolean submitLogged;
+    private static boolean smokeWaterSetupRequested;
+    private static boolean smokeWaterSwimConfirmed;
+    private static boolean smokeWaterSetupFailed;
+    private static boolean smokeWaterTestActive;
+    private static boolean smokeOriginalSprinting;
+    private static int smokeWaterWaitTicks;
 
     private TechniqueVisualRenderer() {}
 
@@ -186,7 +192,21 @@ public final class TechniqueVisualRenderer {
             pendingSmokeAbility = null;
             smokeFinishedLogged = false;
             submitLogged = false;
+            smokeWaterSetupRequested = false;
+            smokeWaterSwimConfirmed = false;
+            smokeWaterSetupFailed = false;
+            smokeWaterTestActive = false;
+            smokeOriginalSprinting = mc.player.isSprinting();
+            smokeWaterWaitTicks = 0;
             smokeNextTick = mc.player.tickCount + 80;
+        }
+        if (smokeWaterTestActive) mc.player.setSprinting(true);
+        if (smokeIndex == 12 && smokeWaterTestActive && mc.player.tickCount >= smokeNextTick) {
+            smokeWaterTestActive = false;
+            mc.player.setSprinting(smokeOriginalSprinting);
+            System.out.printf(java.util.Locale.ROOT,
+                    "[ELEMENTAL_VFX_SMOKE] WATER_SWIM_TEST_COMPLETE swimming=%s inWater=%s underwater=%s%n",
+                    mc.player.isSwimming(), mc.player.isInWater(), mc.player.isUnderWater());
         }
         if (smokeIndex >= SMOKE_ABILITIES.length) {
             boolean complete = SMOKE_MESHES_SUBMITTED.size() == SMOKE_ABILITIES.length
@@ -215,14 +235,38 @@ public final class TechniqueVisualRenderer {
         if (mc.player.tickCount < smokeNextTick) return;
 
         String ability = pendingSmokeAbility;
+        boolean swimmingScenario = isWaterTechnique(ability) && !"water_projectile".equals(ability);
+        if (swimmingScenario) {
+            if (smokeWaterSetupFailed) return;
+            if (!smokeWaterSetupRequested) {
+                smokeWaterSetupRequested = true;
+                smokeOriginalSprinting = mc.player.isSprinting();
+                smokeWaterWaitTicks = 0;
+                System.out.println("[ELEMENTAL_VFX_SMOKE] WATER_SWIM_SETUP_REQUIRED ability=" + ability);
+            }
+            mc.player.setSprinting(true);
+            if (!mc.player.isInWater() || !mc.player.isSwimming()) {
+                smokeWaterWaitTicks++;
+                if (smokeWaterWaitTicks >= 120) {
+                    smokeWaterSetupFailed = true;
+                    System.err.printf(java.util.Locale.ROOT,
+                            "[ELEMENTAL_VFX_SMOKE] WATER_SWIM_SETUP_FAILED swimming=%s inWater=%s underwater=%s%n",
+                            mc.player.isSwimming(), mc.player.isInWater(), mc.player.isUnderWater());
+                }
+                return;
+            }
+            if (!smokeWaterSwimConfirmed) {
+                smokeWaterSwimConfirmed = true;
+                smokeWaterTestActive = true;
+                System.out.printf(java.util.Locale.ROOT,
+                        "[ELEMENTAL_VFX_SMOKE] WATER_SWIM_CONFIRMED swimming=%s inWater=%s underwater=%s%n",
+                        mc.player.isSwimming(), mc.player.isInWater(), mc.player.isUnderWater());
+            }
+        }
         pendingSmokeAbility = null;
         smokeIndex++;
-        boolean originalSwimming = mc.player.isSwimming();
-        boolean swimmingScenario = isWaterTechnique(ability) && !"water_projectile".equals(ability);
-        if (swimmingScenario) mc.player.setSwimming(true);
         start(mc.player.getId(), ability);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
-        mc.player.setSwimming(originalSwimming);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
         smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
     }

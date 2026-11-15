@@ -83,8 +83,9 @@ public final class PlayerAbilityAnimator {
         if (Boolean.getBoolean("elemental.vfx.smoke")
                 && (abilityId.startsWith("water_") || abilityId.startsWith("ice_") || abilityId.equals("great_wave"))) {
             System.out.printf(java.util.Locale.ROOT,
-                    "[ELEMENTAL_VFX_SMOKE] PLAYER_ANIMATION_WATER_AFFINITY %s value=%.3f swimming=%s%n",
-                    abilityId, waterAffinity, entity != null && entity.isSwimming());
+                    "[ELEMENTAL_VFX_SMOKE] PLAYER_ANIMATION_WATER_AFFINITY %s value=%.3f swimming=%s inWater=%s underwater=%s%n",
+                    abilityId, waterAffinity, entity != null && entity.isSwimming(),
+                    entity != null && entity.isInWater(), entity != null && entity.isUnderWater());
         }
         ACTIVE.put(entityId, new ActiveAnimation(abilityId, minecraft.level.getGameTime(), waterAffinity));
     }
