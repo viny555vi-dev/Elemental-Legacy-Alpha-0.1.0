@@ -70,6 +70,7 @@ public final class TechniqueVisualRenderer {
     }
     private static final Map<Integer, ActiveEffect> ACTIVE = new HashMap<>();
     private static final Set<String> SMOKE_MESHES_SUBMITTED = new HashSet<>();
+    private static boolean smokeRockThrowWakeLogged;
     private static final String[] SMOKE_ABILITIES = {
             "flame_projectile", "flame_burst", "fire_whip", "focused_explosion", "fire_propulsion", "fire_dragon",
             "water_projectile", "water_whip", "ice_bind", "ice_blades", "water_shield", "great_wave",
@@ -710,31 +711,54 @@ public final class TechniqueVisualRenderer {
     }
 
     private static void rockProjectiles(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        // Keep the three boulders above and outside the caster silhouette in rear view.
-        // The old low, tightly packed lanes were hidden behind the avatar in the smoke capture.
+        // Three large boulders travel on diverging lanes above the caster silhouette.
         float travel = ease(clamp((t - 0.025F) / 0.78F));
+        if (Boolean.getBoolean("elemental.vfx.smoke") && !smokeRockThrowWakeLogged) {
+            smokeRockThrowWakeLogged = true;
+            System.out.println("[ELEMENTAL_VFX_SMOKE] ROCK_THROW_WAKE_SUBMIT boulders=3 continuous=3");
+        }
         for (int i = 0; i < 3; i++) {
             double lane = i - 1;
-            double z = 0.82 + travel * 3.85 + i * 0.18;
-            double side = lane * 1.24 + Math.sin(t * 6.4 + i * 0.9) * 0.12;
+            double z = 0.82 + travel * 4.20 + i * 0.18;
+            double side = lane * (1.28 + travel * 0.22)
+                    + Math.sin(t * 6.4 + i * 0.9) * 0.12;
             double height = 1.02 + (1 - Math.abs(lane)) * 0.28
-                    + Math.sin(t * 7.0 + i * 1.4) * 0.12;
+                    + travel * 0.18 + Math.sin(t * 7.0 + i * 1.4) * 0.12;
             Vec3 center = point(fx, side, height, z);
             double radius = 0.66 + (i == 1 ? 0.12 : 0.0);
             facetedRock(out, pose, fx, center, radius, 0.88, t * 3.8 + i * 1.25, i);
 
+            // A curved, camera-readable mineral wake follows each boulder.
+            // The old almost-straight ribbon lay edge-on in rear third-person view.
             List<Vec3> wake = new ArrayList<>();
-            for (int segment = 0; segment <= 10; segment++) {
-                double u = segment / 10.0D;
-                double wakeSide = side * (0.78 + u * 0.14)
-                        + Math.sin(t * 7.0 + u * 4.2 + i) * 0.10;
-                double wakeHeight = height - 0.18 + u * 0.16
-                        + Math.sin(u * Math.PI) * 0.18;
-                double wakeForward = z - 0.16 - u * 1.30;
+            for (int segment = 0; segment <= 16; segment++) {
+                double u = segment / 16.0D;
+                double bend = i == 0 ? -1.0D : 1.0D;
+                double wakeSide = side + lane * 0.42 * u
+                        + bend * Math.sin(u * Math.PI) * 0.34
+                        + Math.sin(t * 7.0 + u * 4.2 + i) * 0.06;
+                double wakeHeight = height - 0.12 + u * 0.08
+                        + Math.sin(u * Math.PI) * 0.34;
+                double wakeForward = z - 0.20 - u * 2.10;
                 wake.add(point(fx, wakeSide, wakeHeight, wakeForward));
             }
-            ribbon(out, pose, wake, 0.17, 0xFF76634D);
-            ribbon(out, pose, wake, 0.065, 0xFFD8C19A);
+            ribbon(out, pose, wake, 0.30, 0xFF70583F);
+            ribbon(out, pose, wake, 0.16, 0xFFD1B58A);
+            ribbon(out, pose, wake, 0.055, 0xFFF1DDB9);
+
+            // Small faceted chips sit inside the wake, making the stream read as flying rock.
+            for (int chip = 0; chip < 5; chip++) {
+                double u = (chip + 1) / 6.0D;
+                double chipSide = side + lane * 0.42 * u
+                        + bendSign(i) * Math.sin(u * Math.PI) * 0.34;
+                double chipHeight = height - 0.12 + u * 0.08
+                        + Math.sin(u * Math.PI) * 0.34;
+                double chipForward = z - 0.20 - u * 2.10;
+                Vec3 fragment = point(fx, chipSide, chipHeight, chipForward);
+                double chipScale = 0.13 * (1.0 - u * 0.28);
+                facetedRock(out, pose, fx, fragment, chipScale, chipScale * 1.55,
+                        -t * 4.6 + chip + i, 8 + chip + i * 5);
+            }
 
             for (int chip = 0; chip < 4; chip++) {
                 double chipSide = (chip - 1.5) * 0.24;
@@ -745,6 +769,10 @@ public final class TechniqueVisualRenderer {
                         -t * 4.6 + chip, 4 + chip);
             }
         }
+    }
+
+    private static double bendSign(int laneIndex) {
+        return laneIndex == 0 ? -1.0D : 1.0D;
     }
 
         /**
