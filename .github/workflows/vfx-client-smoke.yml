@@ -295,9 +295,9 @@ jobs:
           for index, ability in enumerate(ability_order, 1):
               for sample_index in range(1, 6):
                   pose_ms, progress, camera = samples_by_ability[ability][sample_index]
-                  # RenderPlayerEvent.Post timestamps identify the pose frame; adding a delay
-              # can cross into the next technique or the server-authoritative pass.
-              video_time = (pose_ms - capture_start_ms) / 1000.0
+                      # RenderPlayerEvent.Post timestamps identify the pose frame; adding a delay
+                  # can cross into the next technique or the server-authoritative pass.
+                  video_time = (pose_ms - capture_start_ms) / 1000.0
                   if video_time < 0:
                       raise SystemExit(
                           f"Invalid video offset for {ability} sample {sample_index}: {video_time:.3f}s"
