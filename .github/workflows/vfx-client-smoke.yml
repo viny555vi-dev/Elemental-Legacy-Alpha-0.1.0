@@ -180,7 +180,7 @@ jobs:
                       if water_keys_down:
                           subprocess.run(["xdotool", "keyup", "w", "keyup", "ctrl"], check=False)
                           water_keys_down = False
-                      command = "execute at Dev run fill ~-10 ~ ~-10 ~10 ~1 ~10 minecraft:air"
+                      command = "execute at Dev run fill ~-10 ~-2 ~-10 ~10 ~2 ~10 minecraft:air"
                       sock.sendall(packet(rcon_request_id, 2, command))
                       _, _, response = read_packet(sock)
                       print(f"RCON restore temporary swim pool: {response}")

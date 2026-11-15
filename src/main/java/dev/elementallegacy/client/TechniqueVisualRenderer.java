@@ -200,7 +200,12 @@ public final class TechniqueVisualRenderer {
             smokeWaterWaitTicks = 0;
             smokeNextTick = mc.player.tickCount + 80;
         }
-        if (smokeWaterTestActive) mc.player.setSprinting(true);
+        if (smokeWaterTestActive) {
+            // Keep the caster centered after entering real water so the swim-enhanced effect
+            // remains in frame instead of drifting behind the third-person camera.
+            mc.player.setSprinting(true);
+            mc.player.setDeltaMovement(Vec3.ZERO);
+        }
         if (smokeIndex == 12 && smokeWaterTestActive && mc.player.tickCount >= smokeNextTick) {
             smokeWaterTestActive = false;
             mc.player.setSprinting(smokeOriginalSprinting);
@@ -209,6 +214,8 @@ public final class TechniqueVisualRenderer {
                     mc.player.isSwimming(), mc.player.isInWater(), mc.player.isUnderWater());
         }
         if (smokeIndex >= SMOKE_ABILITIES.length) {
+            // Let the final client technique finish before the server-authoritative Stone pass.
+            if (mc.player.tickCount < smokeNextTick) return;
             boolean complete = SMOKE_MESHES_SUBMITTED.size() == SMOKE_ABILITIES.length
                     && PlayerAbilityAnimator.hasCompleteSmokeEvidence();
             if (!smokeFinishedLogged && complete) {
