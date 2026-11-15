@@ -488,6 +488,10 @@ jobs:
               echo "Not all 24 techniques passed the arm, torso, stance and distinctness checks."
               exit 25
             fi
+            if ! grep -q "ROCK_THROW_WAKE_SUBMIT boulders=3 continuous=3" "$RUNNER_TEMP/client.log"; then
+              echo "The three continuous Stone projectile wakes were not submitted to the custom geometry collector."
+              exit 35
+            fi
 
             NEAR_WATER_LINE=$(grep -m1 "WATER_AFFINITY water_projectile " "$RUNNER_TEMP/client.log" || true)
             NEAR_WATER_VALUE=$(echo "$NEAR_WATER_LINE" | sed -E "s/.* value=([0-9.]+).*/\\1/")
