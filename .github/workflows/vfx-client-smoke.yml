@@ -353,7 +353,8 @@ jobs:
               "ffprobe", "-v", "error", "-show_entries", "format=duration",
               "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)
           ], text=True).strip())
-          stone_offsets = (0.20, 0.55, 0.90, 1.25, 1.65)
+          # Start after the server-to-client render handoff; the 0.20s frame still showed the prior Cyclone mesh.
+          stone_offsets = (0.55, 0.90, 1.25, 1.65, 2.05)
           stone_manifest = [
               "index\tability\tsample_index\tvideo_time_seconds\tserver_start_ms"
           ]
