@@ -426,10 +426,26 @@ jobs:
             CLIENT_PID=$!
 
             # Dismiss the first-run accessibility welcome screen before quick-play connects.
+            # On Minecraft 26.3 the modal's initial keyboard focus can remain on Narrator,
+            # so a blind Tab sequence is not reliable in headless SDL/X11. Focus the actual
+            # game window and click the fixed Continue button in the 1280x720 client viewport.
             for i in $(seq 1 60); do
               if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
-                sleep 8
-                xdotool key --clearmodifiers Tab Tab Tab Tab Return
+                sleep 5
+                WINDOW_ID=""
+                for attempt in $(seq 1 20); do
+                  WINDOW_ID=$(xdotool search --onlyvisible --name "Minecraft" 2>/dev/null | tail -n 1 || true)
+                  if [ -n "$WINDOW_ID" ]; then break; fi
+                  sleep 0.5
+                done
+                if [ -z "$WINDOW_ID" ]; then
+                  echo "Minecraft client window was not discoverable; cannot dismiss first-run welcome screen."
+                  exit 20
+                fi
+                echo "Minecraft client window detected: $WINDOW_ID"
+                xdotool windowfocus --sync "$WINDOW_ID"
+                xdotool mousemove --sync --window "$WINDOW_ID" 640 672 click 1
+                echo "Clicked the first-run Continue button at client coordinates 640,672."
                 sleep 5
                 break
               fi
