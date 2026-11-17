@@ -396,14 +396,17 @@ jobs:
           PY
 
           set +e
-          xvfb-run -a -e "$RUNNER_TEMP/xvfb-client.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+          xvfb-run -a -e "$RUNNER_TEMP/xvfb-client.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset -ac' bash -lc '
             LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
             export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
+            # The Xvfb server is explicitly started with -ac; avoid passing an Xauthority cookie
+            # through the Gradle single-use daemon to the LWJGL/SDL child process.
+            unset XAUTHORITY
 
-            echo "X11 display preflight: DISPLAY=$DISPLAY"
+            echo "X11 display preflight (access control disabled): DISPLAY=$DISPLAY"
             xdpyinfo -display "$DISPLAY" >/dev/null
             xdotool getdisplaygeometry
 
