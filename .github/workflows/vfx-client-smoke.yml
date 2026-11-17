@@ -21,14 +21,14 @@ jobs:
       - name: Install virtual display and software rendering
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xdotool libgl1-mesa-dri libglx-mesa0 mesa-utils libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg
+          sudo apt-get install -y xvfb xdotool x11-utils libx11-xcb1 libxcb-cursor0 libxcursor1 libxrandr2 libxinerama1 libxi6 libxfixes3 libxss1 libxtst6 libxkbcommon0 libxkbcommon-x11-0 libgl1-mesa-dri libglx-mesa0 mesa-utils libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg
       - name: Verify virtual graphics backends
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
           SDL_VIDEODRIVER: x11
         run: |
-          xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+          xvfb-run -a -e "$RUNNER_TEMP/xvfb-verify.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
             LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
@@ -396,12 +396,16 @@ jobs:
           PY
 
           set +e
-          xvfb-run -a -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+          xvfb-run -a -e "$RUNNER_TEMP/xvfb-client.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
             LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
             export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
+
+            echo "X11 display preflight: DISPLAY=$DISPLAY"
+            xdpyinfo -display "$DISPLAY" >/dev/null
+            xdotool getdisplaygeometry
 
             ffmpeg -y -stats_period 0.05 -progress "$RUNNER_TEMP/ffmpeg-progress.txt" -nostats -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 260 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
@@ -595,6 +599,8 @@ jobs:
             ${{ runner.temp }}/ffmpeg.log
             ${{ runner.temp }}/glx-info.txt
             ${{ runner.temp }}/vulkan-info.txt
+            ${{ runner.temp }}/xvfb-verify.log
+            ${{ runner.temp }}/xvfb-client.log
             ${{ runner.temp }}/vfx-evidence/
             ${{ runner.temp }}/stone-server-evidence/
           if-no-files-found: warn
