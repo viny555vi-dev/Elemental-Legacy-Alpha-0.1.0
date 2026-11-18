@@ -467,57 +467,58 @@ jobs:
             timeout 260s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
 
-            # Dismiss the first-run accessibility welcome screen before quick-play connects.
-            # On Minecraft 26.3 the initial modal keyboard focus can remain on Narrator,
-            # so a blind Tab sequence is not reliable in headless SDL/X11. Focus the actual
-            # game window and click the fixed Continue button in the 1280x720 client viewport.
-            for i in $(seq 1 60); do
-              if grep -q "Setting user:" "$RUNNER_TEMP/client.log"; then
-                sleep 5
-                WINDOW_ID=""
-                for attempt in $(seq 1 30); do
-                  # SDL3 may create the X11 client before mapping it. Do not filter
-                  # by --onlyvisible; map/focus the client once its XID exists.
-                  WINDOW_ID=$(xdotool search --name ".*" 2>/dev/null | tail -n 1 || true)
-                  if [ -n "$WINDOW_ID" ]; then break; fi
-                  sleep 0.5
-                done
-                if [ -z "$WINDOW_ID" ]; then
-                  echo "Minecraft client window was not discoverable; X11 root tree:"
-                  xwininfo -root -tree 2>&1 || true
-                  echo "Client process state:"
-                  if kill -0 "$CLIENT_PID" 2>/dev/null; then
-                    echo "Gradle client wrapper is still alive; all X11 windows:"
-                    xdotool search --name ".*" 2>/dev/null | while read -r id; do
-                      echo "WINDOW=$id"
-                      xdotool getwindowname "$id" 2>/dev/null || true
-                      xdotool getwindowgeometry "$id" 2>/dev/null || true
-                    done
-                    echo "Client process environment:"
-                    for pid in $(pgrep -f "net.neoforged.devlaunch.Main|net.neoforged.fml.startup.Client" || true); do
-                      echo "PID=$pid"
-                      tr "\\0" "\\n" < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEODRIVER)=" || true
-                    done
-                  else
-                    echo "Gradle client wrapper exited before creating a window."
-                  fi
-                  tail -120 "$RUNNER_TEMP/client.log" || true
-                  echo "Minecraft client window was not discoverable; cannot dismiss first-run welcome screen."
-                  exit 20
-                fi
-                echo "Minecraft SDL client window detected: $WINDOW_ID"
-                xdotool windowmap --sync "$WINDOW_ID" || true
-                xdotool windowraise "$WINDOW_ID" || true
-                xdotool windowfocus --sync "$WINDOW_ID" || true
-                xdotool mousemove --sync --window "$WINDOW_ID" 640 672 click 1
-                sleep 1
-                xdotool key --clearmodifiers Return || true
-                echo "Mapped/focused SDL window, clicked Continue and sent Return for the first-run screen."
-                sleep 5
+            # Dismiss Minecraft 26.3's first-run accessibility welcome screen only
+            # after the client has finished creating its sound engine and texture atlases.
+            # "Setting user" occurs several seconds earlier; clicking at that point races
+            # the screen construction and leaves the client on the welcome modal forever.
+            UI_READY=0
+            for i in $(seq 1 120); do
+              if grep -q "Sound engine started" "$RUNNER_TEMP/client.log" \
+                  && grep -q "Loaded 0 entity animations" "$RUNNER_TEMP/client.log"; then
+                UI_READY=1
+                break
+              fi
+              if ! kill -0 "$CLIENT_PID" 2>/dev/null; then
                 break
               fi
               sleep 1
             done
+            if [ "$UI_READY" -ne 1 ]; then
+              echo "Minecraft UI did not finish resource initialization; refusing to send early input."
+              tail -160 "$RUNNER_TEMP/client.log" || true
+              exit 20
+            fi
+
+            WINDOW_ID=""
+            for attempt in $(seq 1 30); do
+              # SDL3 may create the X11 client before mapping it. Do not filter
+              # by --onlyvisible; map/focus the client once its XID exists.
+              WINDOW_ID=$(xdotool search --name ".*" 2>/dev/null | tail -n 1 || true)
+              if [ -n "$WINDOW_ID" ]; then break; fi
+              sleep 0.5
+            done
+            if [ -z "$WINDOW_ID" ]; then
+              echo "Minecraft client window was not discoverable; X11 root tree:"
+              xwininfo -root -tree 2>&1 || true
+              tail -160 "$RUNNER_TEMP/client.log" || true
+              exit 20
+            fi
+
+            echo "Minecraft SDL client window detected after UI readiness: $WINDOW_ID"
+            xdotool windowmap --sync "$WINDOW_ID" || true
+            xdotool windowraise "$WINDOW_ID" || true
+            xdotool windowfocus --sync "$WINDOW_ID" || true
+            # Retry the Continue click while quick-play starts. Once the welcome modal
+            # closes, this bottom-center coordinate is empty on the main menu and harmless.
+            for attempt in $(seq 1 4); do
+              xdotool mousemove --sync --window "$WINDOW_ID" 640 672
+              xdotool click --clearmodifiers 1
+              sleep 1.5
+              if grep -E "Dev.*(joined the game|logged in with entity id)" "$RUNNER_TEMP/server.log" >/dev/null; then
+                break
+              fi
+            done
+            echo "Sent post-initialization Continue clicks; waiting for quick-play server login."
 
             JOINED=0
             for i in $(seq 1 100); do
