@@ -92,6 +92,11 @@ public final class StoneArmorService {
         }
     }
 
+    /** True during the 8-second protection window, not during assembly or recovery. */
+    public static boolean isActive(ServerPlayer player) {
+        return isProtecting(player, ACTIVE.get(player.getUUID()));
+    }
+
     public static void onIncomingDamage(LivingIncomingDamageEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         ArmorState state = ACTIVE.get(player.getUUID());
