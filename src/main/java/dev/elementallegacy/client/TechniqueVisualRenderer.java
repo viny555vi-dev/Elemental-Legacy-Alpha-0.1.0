@@ -319,7 +319,7 @@ public final class TechniqueVisualRenderer {
             case "rock_throw" -> rockProjectiles(fx, t, pose, out);
             case "stone_wall" -> stoneWall(fx, t, pose, out);
             case "rock_cage" -> rockCage(fx, t, pose, out);
-            case "seismic_wave" -> seismic(fx, t, pose, out, false);
+            case "seismic_wave" -> seismicWaveFront(fx, t, pose, out);
             case "stone_armor" -> stoneArmor(fx, t, pose, out);
             case "earthquake" -> seismic(fx, t, pose, out, true);
 
@@ -940,6 +940,75 @@ public final class TechniqueVisualRenderer {
      * lifted stone plates, debris spires and expanding fault rings make the impact
      * read as a real earthquake rather than a row of floating spikes.
      */
+    /**
+     * A forward-moving ground crest for Seismic Wave. The wave has a visible leading
+     * edge, raised slabs under that edge, and fractured ground trailing behind it.
+     * Server collision and temporary ridge blocks use the same nine-step progression.
+     */
+    private static void seismicWaveFront(ActiveEffect fx, float t,
+                                         PoseStack.Pose pose, VertexConsumer out) {
+        float travel = ease(clamp(t / 0.55F));
+        float settle = 1.0F - ease(clamp((t - 0.60F) / 0.18F));
+        if (settle <= 0.001F) return;
+
+        double frontDistance = 0.70D + travel * 8.25D;
+        List<Vec3> crest = new ArrayList<>();
+        List<Vec3> footing = new ArrayList<>();
+
+        // A broken, uneven ridge rises in separate stone plates across the wave front.
+        for (int lane = -4; lane <= 4; lane++) {
+            double side = lane * 0.58D;
+            double ground = terrainOffset(fx, side, frontDistance);
+            double phase = t * 18.0D + lane * 0.91D;
+            double lift = (0.16D + Math.max(0.0D, Math.sin(phase)) * 0.62D) * settle;
+            double tilt = Math.sin(phase * 0.67D) * 0.16D;
+            Vec3 slabCenter = point(fx, side + tilt, ground + 0.10D + lift,
+                    frontDistance + Math.sin(phase * 0.43D) * 0.12D);
+            int shade = Math.floorMod(lane + 4, 3);
+            int tone = shade == 0 ? 0xFFB9B7AE : shade == 1 ? 0xFF8D908A : 0xFFD2CEC2;
+            orientedBox(out, pose, fx, slabCenter,
+                    0.62D, 0.24D + lift * 0.38D, 0.70D, tone);
+            if ((lane & 1) == 0) {
+                spike(out, pose, point(fx, side + tilt, ground + 0.18D + lift,
+                                frontDistance - 0.08D),
+                        0.24D, (0.48D + lift * 0.68D) * settle, 0xFFE0D9C8);
+            }
+            crest.add(point(fx, side, ground + 0.12D + lift * 0.20D, frontDistance));
+            footing.add(point(fx, side, ground + 0.035D, frontDistance - 0.34D));
+        }
+        ribbon(out, pose, crest, 0.13D * settle, 0xFFDAD6CB);
+        ribbon(out, pose, footing, 0.075D * settle, 0xFF5B5D59);
+
+        // Jagged seams trail behind the moving ridge; they recede with the dust rather
+        // than behaving like a permanent earthquake scar.
+        for (int crack = -3; crack <= 3; crack++) {
+            List<Vec3> darkSeam = new ArrayList<>();
+            List<Vec3> litEdge = new ArrayList<>();
+            for (int segment = 0; segment <= 14; segment++) {
+                double u = segment / 14.0D;
+                double forward = 0.35D + u * Math.max(0.0D, frontDistance - 0.55D);
+                double jagged = Math.sin(segment * 1.7D + crack * 2.1D) * 0.12D;
+                double side = crack * 0.43D + jagged;
+                Vec3 p = groundPoint(fx, side, 0.028D, forward);
+                darkSeam.add(p);
+                litEdge.add(p.add(0.0D, 0.016D, 0.0D));
+            }
+            ribbon(out, pose, darkSeam, 0.045D * settle, 0xFF3F4548);
+            ribbon(out, pose, litEdge, 0.014D * settle, 0xFFD4D2C9);
+        }
+
+        // Loose fragments are thrown just behind the crest, making the soil feel displaced.
+        for (int chip = 0; chip < 10; chip++) {
+            double lane = (chip - 4.5D) * 0.46D;
+            double ground = terrainOffset(fx, lane, frontDistance - 0.48D);
+            double rise = (0.24D + (chip % 3) * 0.11D) * settle;
+            Vec3 fragment = point(fx, lane, ground + rise, frontDistance - 0.48D);
+            double size = 0.12D + (chip % 3) * 0.035D;
+            facetedRock(out, pose, fx, fragment, size, size * 1.55D,
+                    t * 2.8D + chip * 0.77D, chip + 30);
+        }
+    }
+
     private static void seismic(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out, boolean wide) {
         float wave = ease(clamp(t / 0.28F));
         float decay = 1.0F - ease(clamp((t - 0.82F) / 0.18F));
