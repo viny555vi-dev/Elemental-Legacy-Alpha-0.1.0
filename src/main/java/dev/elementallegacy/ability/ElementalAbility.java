@@ -22,7 +22,7 @@ public enum ElementalAbility {
     STONE_WALL("stone_wall", "Muralha de Pedra", Element.STONE, 22, 12, 12, 6, 16, "Ergue uma linha defensiva de rocha."),
     ROCK_CAGE("rock_cage", "Prisão de Rocha", Element.STONE, 24, 14, 26, 8, 18, "Prende o alvo em uma explosão de rocha."),
     SEISMIC_WAVE("seismic_wave", "Tremor Sísmico", Element.STONE, 22, 12, 28, 10, 18, "Onda de choque que percorre o solo."),
-    STONE_ARMOR("stone_armor", "Armadura de Pedra", Element.STONE, 20, 16, 8, 4, 15, "Reforça o corpo e repele inimigos próximos."),
+    STONE_ARMOR("stone_armor", "Armadura de Pedra", Element.STONE, 22, 16, 0, 4, 15, "Reveste o corpo com placas defensivas de pedra."),
     EARTHQUAKE("earthquake", "Terremoto", Element.STONE, 42, 25, 50, 14, 30, "Abalo amplo com múltiplos impactos."),
     AIR_BLAST("air_blast", "Rajada de Ar", Element.GALE, 10, 3, 12, 18, 8, "Disparo comprimido de ar."),
     AIR_PUSH("air_push", "Empurrão de Ar", Element.GALE, 12, 4, 14, 8, 10, "Pulso circular que afasta inimigos."),
