@@ -795,96 +795,96 @@ public final class TechniqueVisualRenderer {
      * and crenellations give the wall a recognisable fortress silhouette.
      */
     private static void stoneWall(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        // The server places the real wall in stages from 1.3s to ~3.8s.
-        // This client mesh follows the same construction window and never retracts:
-        // after the build effect ends, the persistent world blocks remain.
+        // The mesh is a construction preview for the same 7x4 real block wall
+        // placed by the server. It grows from the ground, settles, and never retracts.
         float formed = ease(clamp((t - 0.20F) / 0.51F));
-        final double forward = 3.8;
-        final double courseHeight = 0.69;
+        final double forward = 3.0D;
+        final double courseHeight = 0.87D;
         List<Vec3> crownLine = new ArrayList<>();
         List<Vec3> foundation = new ArrayList<>();
 
-        // Continuous load-bearing stone core behind the staggered facade.
-        // Slightly overlapping terrain-sampled panels close visual gaps while
-        // preserving local ground height on each section of the rampart.
-        for (int column = -7; column <= 7; column++) {
-            double side = column * 0.62;
+        // Load-bearing core: seven broad sections with overlapping edges.
+        for (int column = -3; column <= 3; column++) {
+            double side = column * 0.90D;
             double ground = terrainOffset(fx, side, forward);
             orientedBox(out, pose, fx,
-                    point(fx, side, ground + 2.07 * formed, forward - 0.43 * formed),
-                    0.74 * formed, 4.14 * formed, 0.34 * formed, 0xFF9EA7B1);
+                    point(fx, side, ground + 1.74D * formed, forward - 0.34D * formed),
+                    0.94D * formed, 3.48D * formed, 0.38D * formed, 0xFF77766F);
         }
 
-        for (int row = 0; row < 6; row++) {
-            double stagger = (row & 1) == 0 ? 0.0 : 0.31;
-            for (int column = -7; column <= 7; column++) {
-                double side = column * 0.62 + stagger;
-                if (Math.abs(side) > 4.45) continue;
-
+        // Four staggered courses match the real wall's block footprint.
+        for (int row = 0; row < 4; row++) {
+            double stagger = (row & 1) == 0 ? -0.08D : 0.08D;
+            for (int column = -3; column <= 3; column++) {
+                double side = column * 0.90D + stagger;
                 double ground = terrainOffset(fx, side, forward);
-                double variation = Math.sin(column * 1.31 + row * 0.77) * 0.035;
-                double width = (0.64 + variation) * formed;
-                double height = (0.69 + Math.cos(column * 0.83 + row) * 0.008) * formed;
-                double depth = 0.78 * formed;
-                double centerY = ground + (row + 0.5) * courseHeight * formed;
+                double variation = Math.sin(column * 1.31D + row * 0.77D) * 0.035D;
+                double width = (0.88D + variation) * formed;
+                double height = (0.84D + Math.cos(column * 0.83D + row) * 0.008D) * formed;
+                double depth = 0.78D * formed;
+                double centerY = ground + (row + 0.5D) * courseHeight * formed;
                 int shade = Math.floorMod(column + row * 2, 4);
                 int tone = switch (shade) {
-                    case 0 -> 0xFFE0E3E7;
-                    case 1 -> 0xFFC4CAD1;
-                    case 2 -> 0xFFADB5BE;
-                    default -> 0xFFD2D7DD;
+                    case 0 -> 0xFFB7B2A5;
+                    case 1 -> 0xFF99958B;
+                    case 2 -> 0xFF77766F;
+                    default -> 0xFF8A8982;
                 };
 
-                // Each course is offset half a block, breaking up the old vertical-log appearance.
                 orientedBox(out, pose, fx, point(fx, side, centerY, forward),
                         width, height, depth, tone);
 
-                // Slightly raised face-stone gives the rampart a layered, chipped masonry surface.
+                // Raised broken faces create volume rather than a flat gray panel.
                 if ((column + row) % 3 == 0) {
                     orientedBox(out, pose, fx,
-                            point(fx, side - 0.015, centerY + 0.035 * formed, forward + 0.405 * formed),
-                            width * 0.82, height * 0.72, 0.045 * formed, 0xFFE9ECEF);
+                            point(fx, side - 0.015D, centerY + 0.035D * formed,
+                                    forward + 0.405D * formed),
+                            width * 0.78D, height * 0.70D, 0.055D * formed, 0xFFC5C0B2);
                 }
 
-                // Taller merlons on alternating top blocks form a strong castle-wall silhouette.
-                if (row == 5 && (column & 1) == 0) {
+                // Uneven raised crown stones give the wall a readable silhouette.
+                if (row == 3 && (column & 1) == 0) {
                     orientedBox(out, pose, fx,
-                            point(fx, side, ground + 4.43 * formed, forward),
-                            0.43 * formed, 0.48 * formed, 0.84 * formed, 0xFFBFC6CE);
+                            point(fx, side, ground + 3.72D * formed, forward),
+                            0.52D * formed, 0.48D * formed, 0.84D * formed, 0xFFAAA597);
                 }
                 if (row == 0) {
-                    foundation.add(point(fx, side, ground + 0.06 * formed, forward + 0.43 * formed));
+                    foundation.add(point(fx, side, ground + 0.055D * formed, forward + 0.43D * formed));
                 }
-                if (row == 5) crownLine.add(point(fx, side, ground + 4.14 * formed, forward));
+                if (row == 3) {
+                    crownLine.add(point(fx, side, ground + 3.48D * formed, forward));
+                }
             }
         }
 
-        // Broad corner buttresses lock the wall visually into the terrain.
+        // Buttresses transfer the visual load into the terrain at both ends.
         for (int sideSign : new int[]{-1, 1}) {
-            double side = sideSign * 3.95;
+            double side = sideSign * 2.70D;
             double ground = terrainOffset(fx, side, forward);
-            for (int course = 0; course < 4; course++) {
+            for (int course = 0; course < 3; course++) {
                 orientedBox(out, pose, fx,
-                        point(fx, side, ground + (course + 0.5) * 0.91 * formed, forward - 0.08 * formed),
-                        0.88 * formed, 0.86 * formed, 1.02 * formed,
-                        (course & 1) == 0 ? 0xFFB9C1C9 : 0xFFD4D9DE);
+                        point(fx, side, ground + (course + 0.5D) * 1.10D * formed,
+                                forward - 0.08D * formed),
+                        0.88D * formed, 1.02D * formed, 0.98D * formed,
+                        (course & 1) == 0 ? 0xFF858178 : 0xFFAAA597);
             }
         }
 
-        // Fine recessed mortar joints use a cool mineral shadow instead of the old brown tint.
-        for (int row = 1; row < 6; row++) {
+        // Recessed mortar seams and a fractured-looking footing.
+        for (int row = 1; row < 4; row++) {
             List<Vec3> seam = new ArrayList<>();
-            for (int x = -14; x <= 14; x++) {
-                double side = x * 0.31;
+            for (int x = -12; x <= 12; x++) {
+                double side = x * 0.225D;
                 double ground = terrainOffset(fx, side, forward);
-                seam.add(point(fx, side, ground + row * courseHeight * formed, forward + 0.405 * formed));
+                seam.add(point(fx, side,
+                        ground + row * courseHeight * formed, forward + 0.405D * formed));
             }
-            ribbon(out, pose, seam, 0.018 * formed, 0xFF626A73);
+            ribbon(out, pose, seam, 0.022D * formed, 0xFF4F504C);
         }
 
-        ribbon(out, pose, crownLine, 0.065 * formed, 0xFFE9ECEF);
-        ribbon(out, pose, foundation, 0.085 * formed, 0xFF777F88);
-        groundRing(fx, pose, out, forward, 4.35, 0.045, 0xFFB9C1C9, 56);
+        ribbon(out, pose, crownLine, 0.075D * formed, 0xFFC9C4B7);
+        ribbon(out, pose, foundation, 0.095D * formed, 0xFF555650);
+        groundRing(fx, pose, out, forward, 3.25D, 0.045D, 0xFF99958B, 56);
     }
 
     private static void rockCage(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
