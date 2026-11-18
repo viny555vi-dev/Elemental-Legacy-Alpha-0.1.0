@@ -10,11 +10,13 @@ public final class TechniqueTimeline {
     private TechniqueTimeline() {}
 
     // Shared server/client progression for the advancing Seismic Wave front.
-    public static final int SEISMIC_WAVE_START_TICK = 42;
-    public static final int SEISMIC_WAVE_STEP_INTERVAL_TICKS = 3;
+    // 9 steps at 5-tick intervals travel 7.02 blocks from 2.0s to 4.0s;
+    // the last temporary ridge settles/restores at 6.0s (40 ticks later).
+    public static final int SEISMIC_WAVE_START_TICK = 40;
+    public static final int SEISMIC_WAVE_STEP_INTERVAL_TICKS = 5;
     public static final int SEISMIC_WAVE_STEP_COUNT = 9;
     public static final int SEISMIC_WAVE_BLOCK_LIFETIME_TICKS = 40;
-    public static final double SEISMIC_WAVE_STEP_DISTANCE = 0.92D;
+    public static final double SEISMIC_WAVE_STEP_DISTANCE = 0.78D;
 
     public static int durationTicks(String abilityId) {
         if (abilityId == null) return 48;
