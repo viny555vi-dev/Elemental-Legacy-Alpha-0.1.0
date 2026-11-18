@@ -40,6 +40,37 @@ jobs:
           '
       - name: Build mod
         run: gradle clean build --no-daemon --refresh-dependencies --stacktrace
+      - name: Prepare standalone downloadable mod JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist-download
+          mapfile -t MOD_JARS < <(find build/libs -maxdepth 1 -type f -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | sort)
+          if [ "${#MOD_JARS[@]}" -lt 1 ]; then
+            echo "No distributable mod JAR was produced by the successful Gradle build."
+            find build/libs -maxdepth 1 -type f -print || true
+            exit 1
+          fi
+          cp "${MOD_JARS[@]}" dist-download/
+          {
+            echo "Elemental Legacy 0.1.0-alpha.3"
+            echo "Minecraft Java: 26.3"
+            echo "NeoForge: 26.3.0.95"
+            echo "Branch: ${GITHUB_REF_NAME}"
+            echo "Commit: ${GITHUB_SHA}"
+            echo
+            echo "Install: place the downloaded .jar file in your Minecraft mods folder and launch the NeoForge 26.3.0.95 profile."
+            echo "Do not extract the JAR."
+          } > dist-download/INSTALL.txt
+          (cd dist-download && sha256sum *.jar > SHA256SUMS.txt)
+          ls -lh dist-download/
+      - name: Publish standalone mod download
+        uses: actions/upload-artifact@v4
+        with:
+          name: Elemental-Legacy-Mod-JAR
+          path: dist-download/
+          if-no-files-found: error
+          retention-days: 30
       - name: Start dedicated Minecraft server
         shell: bash
         run: |
@@ -410,7 +441,7 @@ jobs:
             unset XAUTHORITY
 
             echo "SDL3/X11 preflight: DISPLAY=$DISPLAY SDL_VIDEO_DRIVER=$SDL_VIDEO_DRIVER XAUTHORITY=${XAUTHORITY:-<unset>} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>}"
-            ldconfig -p | grep -E 'lib(X11|Xrandr|Xcursor|Xi|Xfixes|Xss|Xtst|xkbcommon)' || true
+            ldconfig -p | grep -E "lib(X11|Xrandr|Xcursor|Xi|Xfixes|Xss|Xtst|xkbcommon)" || true
             xdpyinfo -display "$DISPLAY" >/dev/null
             xdotool getdisplaygeometry
 
@@ -455,9 +486,9 @@ jobs:
                     echo "Gradle client wrapper is still alive; visible X11 windows:"
                     xdotool search --onlyvisible --name . 2>/dev/null | while read -r id; do xdotool getwindowname "$id" 2>/dev/null || true; done
                     echo "Client process environment:"
-                    for pid in $(pgrep -f 'net.neoforged.devlaunch.Main|net.neoforged.fml.startup.Client' || true); do
+                    for pid in $(pgrep -f "net.neoforged.devlaunch.Main|net.neoforged.fml.startup.Client" || true); do
                       echo "PID=$pid"
-                      tr '\\0' '\\n' < "/proc/$pid/environ" | grep -E '^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER)=' || true
+                      tr '\\0' '\\n' < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER)=" || true
                     done
                   else
                     echo "Gradle client wrapper exited before creating a window."
