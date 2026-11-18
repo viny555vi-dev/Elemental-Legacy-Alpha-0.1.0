@@ -86,7 +86,7 @@ public final class ElementalAbilityService {
         double effectiveRange=a.range()*(1.0D+(waterAffinity-1.0D)*0.28D);
         // A wall is a structure and armor is a defensive state: neither is a radial/front-cone attack.
         if (a == ElementalAbility.STONE_WALL || a == ElementalAbility.STONE_ARMOR
-                || a == ElementalAbility.EARTHQUAKE) return 0;
+                || a == ElementalAbility.SEISMIC_WAVE || a == ElementalAbility.EARTHQUAKE) return 0;
         AABB box=player.getBoundingBox().inflate(effectiveRange,Math.max(3,effectiveRange*0.55),effectiveRange);
         int hits=0;
         for(LivingEntity target:level.getEntitiesOfClass(LivingEntity.class,box,e->e!=player&&e.isAlive()&&!e.isSpectator())){
@@ -381,6 +381,25 @@ public final class ElementalAbilityService {
                     }));
                 }
             }
+        } else if (a == ElementalAbility.SEISMIC_WAVE) {
+            Set<UUID> targetsHit = new HashSet<>();
+            for (int waveStep = 1; waveStep <= 9; waveStep++) {
+                final int step = waveStep;
+                final int waveTick = 42 + (step - 1) * 3;
+                cues.add(new ScheduledCue(waveTick, () -> {
+                    int hits = applySeismicWaveStep(level, player, castEpicenter, look,
+                            rightBasis, step, targetsHit);
+                    placeSeismicWaveRidge(level, player, castEpicenter, look, rightBasis, step);
+                    if (Boolean.getBoolean("elemental.vfx.smoke")) {
+                        System.out.println("[ELEMENTAL_STONE_SMOKE] SEISMIC_WAVE_FRONT step="
+                                + step + "/9 hits=" + hits);
+                    }
+                    if (step == 9 && !targetsHit.isEmpty()) {
+                        ElementalWorldData.get(level.getServer()).addXp(player.getUUID(),
+                                a.xpReward() * targetsHit.size());
+                    }
+                }));
+            }
         } else {
             // Other terrain formations rise in nine timed stages instead of appearing at once.
             for (int structureStep = 0; structureStep < 9; structureStep++) {
@@ -398,11 +417,13 @@ public final class ElementalAbilityService {
         for(int segment=1;segment<=9;segment++){
             final int step=segment;
             int segmentTick = a == ElementalAbility.STONE_WALL ? 26 + step * 6
-                    : a == ElementalAbility.EARTHQUAKE ? 36 + step * 10 : 6 + step * 2;
+                    : a == ElementalAbility.EARTHQUAKE ? 36 + step * 10
+                    : a == ElementalAbility.SEISMIC_WAVE ? 42 + (step - 1) * 3
+                    : 6 + step * 2;
             cues.add(new ScheduledCue(segmentTick,()->renderTechniqueSegment(
                     level,player,a,origin,look,rightBasis,upBasis,step,waterAffinity)));
         }
-        if (a != ElementalAbility.EARTHQUAKE) {
+        if (a != ElementalAbility.EARTHQUAKE && a != ElementalAbility.SEISMIC_WAVE) {
             cues.add(new ScheduledCue(27,()->{
                 Vec3 impactPoint=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
                 impact(level,a,impactPoint);
@@ -683,6 +704,99 @@ public final class ElementalAbilityService {
     }
 
     /**
+     * The seismic wave is a nine-step advancing ground front. Damage is applied only
+     * when the front reaches an entity; targets are hit once by this technique.
+     */
+    private static int applySeismicWaveStep(ServerLevel level, ServerPlayer player, Vec3 epicenter,
+                                            Vec3 look, Vec3 right, int step, Set<UUID> targetsHit) {
+        Vec3 forward = new Vec3(look.x, 0.0D, look.z);
+        if (forward.lengthSqr() < 0.0001D) forward = new Vec3(0.0D, 0.0D, 1.0D);
+        else forward = forward.normalize();
+        Vec3 lateral = new Vec3(-forward.z, 0.0D, forward.x);
+        double frontDistance = step * 0.92D;
+        AABB area = new AABB(epicenter.x - 10.0D, epicenter.y - 4.0D, epicenter.z - 10.0D,
+                epicenter.x + 10.0D, epicenter.y + 5.0D, epicenter.z + 10.0D);
+        int hits = 0;
+
+        for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, area,
+                entity -> entity != player && entity.isAlive() && !entity.isSpectator())) {
+            if (targetsHit.contains(target.getUUID())) continue;
+            Vec3 offset = target.getBoundingBox().getCenter().subtract(epicenter);
+            double along = offset.dot(forward);
+            double across = Math.abs(offset.dot(lateral));
+            double vertical = Math.abs(offset.y);
+            if (Math.abs(along - frontDistance) > 0.72D || across > 2.55D || vertical > 2.6D) continue;
+
+            boolean grounded = target.onGround();
+            float damage = grounded ? 7.0F : 2.5F;
+            if (!target.hurtServer(level, player.damageSources().playerAttack(player), damage)) continue;
+            targetsHit.add(target.getUUID());
+            hits++;
+
+            double shove = grounded ? 1.28D : 0.48D;
+            double lift = grounded ? 0.48D : 0.18D;
+            target.push(forward.x * shove, lift, forward.z * shove);
+            Vec3 impactCenter = target.position().add(0.0D, target.getBbHeight() * 0.48D, 0.0D);
+            emit(level, ParticleTypes.POOF, impactCenter, 18, 0.28D, 0.24D, 0.28D, 0.09D);
+            debris(level, impactCenter, Element.STONE, 12);
+        }
+
+        // Dust and block-textured fragments mark the exact advancing ridge.
+        Vec3 frontCenter = epicenter.add(forward.scale(frontDistance));
+        for (int lane = -2; lane <= 2; lane++) {
+            Vec3 point = frontCenter.add(lateral.scale(lane * 0.72D));
+            BlockPos ground = surfaceBlock(level, point).below();
+            if (!level.hasChunkAt(ground)) continue;
+            BlockState groundState = level.getBlockState(ground);
+            if (groundState.isSolid()) {
+                emit(level, new BlockParticleOption(ParticleTypes.BLOCK, groundState),
+                        point.add(0.0D, 0.36D, 0.0D), 4, 0.12D, 0.20D, 0.12D, 0.12D);
+            }
+            emit(level, ParticleTypes.CLOUD, point, 3, 0.18D, 0.10D, 0.18D, 0.04D);
+        }
+        return hits;
+    }
+
+    /**
+     * Temporary stone slabs rise on the moving seismic front and settle back into
+     * the world after the wave passes. They use actual block collision while present.
+     */
+    private static void placeSeismicWaveRidge(ServerLevel level, ServerPlayer player, Vec3 epicenter,
+                                              Vec3 look, Vec3 right, int step) {
+        Vec3 forward = new Vec3(look.x, 0.0D, look.z);
+        if (forward.lengthSqr() < 0.0001D) forward = new Vec3(0.0D, 0.0D, 1.0D);
+        else forward = forward.normalize();
+        Vec3 lateral = new Vec3(-forward.z, 0.0D, forward.x);
+        Vec3 front = epicenter.add(forward.scale(step * 0.92D));
+        List<BlockPos> candidates = new ArrayList<>();
+        candidates.add(surfaceBlock(level, front));
+        candidates.add(surfaceBlock(level, front.add(lateral.scale(0.9D))));
+        candidates.add(surfaceBlock(level, front.add(lateral.scale(-0.9D))));
+        BlockState material = Blocks.COBBLESTONE.defaultBlockState();
+        List<TemporaryBlock> owned = TEMPORARY_BLOCKS.computeIfAbsent(
+                player.getUUID(), ignored -> new ArrayList<>());
+
+        for (BlockPos pos : candidates) {
+            if (!level.hasChunkAt(pos) || level.isOutsideBuildHeight(pos)
+                    || !level.isEmptyBlock(pos) || !level.getFluidState(pos).isEmpty()
+                    || level.getBlockEntity(pos) != null
+                    || !level.getBlockState(pos.below()).isSolid()) continue;
+            AABB occupied = new AABB(pos.getX(), pos.getY(), pos.getZ(),
+                    pos.getX() + 1.0D, pos.getY() + 1.0D, pos.getZ() + 1.0D);
+            if (player.getBoundingBox().intersects(occupied)) continue;
+            BlockState previous = level.getBlockState(pos);
+            if (level.setBlock(pos, material, 3)) {
+                owned.add(new TemporaryBlock(level, pos, previous, material,
+                        level.getGameTime() + 40L, ElementalAbility.SEISMIC_WAVE.id()));
+                if (Boolean.getBoolean("elemental.vfx.smoke")) {
+                    System.out.println("[ELEMENTAL_STONE_SMOKE] SEISMIC_RIDGE_BLOCK pos=" + pos
+                            + " step=" + step);
+                }
+            }
+        }
+    }
+
+    /**
      * Removes a narrow, branching line of natural surface blocks. These cuts are permanent
      * world edits: no timer, client-only mesh or reconnect cleanup restores them.
      */
@@ -821,13 +935,7 @@ public final class ElementalAbilityService {
                 }
             }
             case SEISMIC_WAVE -> {
-                material = Blocks.COBBLESTONE.defaultBlockState();
-                lifetime = 40;
-                for (int step = 1; step <= 6; step++) {
-                    Vec3 impact = player.position().add(look.scale(step * 1.05D));
-                    BlockPos base = surfaceBlock(level, impact);
-                    positions.add(base);
-                }
+                return;
             }
             case EARTHQUAKE -> {
                 // Permanent terrain fractures are cut by createEarthquakeFissureStage,
