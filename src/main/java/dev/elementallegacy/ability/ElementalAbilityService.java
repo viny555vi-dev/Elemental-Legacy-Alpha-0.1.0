@@ -702,7 +702,7 @@ public final class ElementalAbilityService {
                         + Math.cos(angle + Math.PI / 2.0D) * perpendicularJitter;
                 double z = epicenter.z + Math.sin(angle) * distance
                         + Math.sin(angle + Math.PI / 2.0D) * perpendicularJitter;
-                BlockPos ground = surfaceBlock(level, new Vec3(x, player.getY(), z)).below();
+                BlockPos ground = surfaceBlock(level, new Vec3(x, epicenter.y, z)).below();
                 if (!level.hasChunkAt(ground) || level.isOutsideBuildHeight(ground)
                         || !player.mayInteract(level, ground)
                         || level.getBlockEntity(ground) != null
@@ -750,7 +750,8 @@ public final class ElementalAbilityService {
                                            int wave, int ringStep, Set<UUID> targetsHit) {
         double innerRadius = ringStep * 2.0D;
         double outerRadius = innerRadius + 2.0D;
-        AABB area = player.getBoundingBox().inflate(13.0D, 5.0D, 13.0D);
+        AABB area = new AABB(epicenter.x - 13.0D, epicenter.y - 5.0D, epicenter.z - 13.0D,
+                epicenter.x + 13.0D, epicenter.y + 5.0D, epicenter.z + 13.0D);
         int hits = 0;
 
         for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, area,
@@ -759,7 +760,8 @@ public final class ElementalAbilityService {
             double distance = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
             if (distance <= innerRadius || distance > outerRadius) continue;
 
-            float damage = target.onGround() ? 4.0F : 2.0F;
+            boolean grounded = target.onGround();
+            float damage = grounded ? 4.0F : 2.0F;
             if (!target.hurtServer(level, player.damageSources().playerAttack(player), damage)) continue;
             hits++;
             targetsHit.add(target.getUUID());
@@ -767,8 +769,8 @@ public final class ElementalAbilityService {
             Vec3 horizontal = new Vec3(offset.x, 0.0D, offset.z);
             if (horizontal.lengthSqr() < 0.0001D) horizontal = new Vec3(1.0D, 0.0D, 0.0D);
             horizontal = horizontal.normalize();
-            double shove = target.onGround() ? 0.78D : 0.28D;
-            double lift = target.onGround() ? 0.52D : 0.16D;
+            double shove = grounded ? 0.78D : 0.28D;
+            double lift = grounded ? 0.52D : 0.16D;
             target.push(horizontal.x * shove, lift, horizontal.z * shove);
             emitElement(level, Element.STONE,
                     target.position().add(0.0D, target.getBbHeight() * 0.45D, 0.0D),
