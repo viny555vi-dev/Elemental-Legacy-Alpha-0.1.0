@@ -61,6 +61,9 @@ public final class ElementalAbilityService {
             System.out.println("[ELEMENTAL_STONE_SMOKE] ABILITY_START " + ability.id()
                     + " atMs=" + System.currentTimeMillis());
         }
+        if (ability == ElementalAbility.EARTHQUAKE) {
+            return ability.displayName() + " iniciado: três ondas atravessarão o terreno e abrirão fraturas permanentes.";
+        }
         if(hits>0){
             data.addXp(player.getUUID(),ability.xpReward()*hits);
             return ability.displayName()+" executada! Alvos atingidos: "+hits+". +"+(ability.xpReward()*hits)+" XP.";
@@ -82,7 +85,8 @@ public final class ElementalAbilityService {
     private static int applyCombat(ServerLevel level,ServerPlayer player,ElementalAbility a,Vec3 origin,Vec3 look,float waterAffinity){
         double effectiveRange=a.range()*(1.0D+(waterAffinity-1.0D)*0.28D);
         // A wall is a structure and armor is a defensive state: neither is a radial/front-cone attack.
-        if (a == ElementalAbility.STONE_WALL || a == ElementalAbility.STONE_ARMOR) return 0;
+        if (a == ElementalAbility.STONE_WALL || a == ElementalAbility.STONE_ARMOR
+                || a == ElementalAbility.EARTHQUAKE) return 0;
         AABB box=player.getBoundingBox().inflate(effectiveRange,Math.max(3,effectiveRange*0.55),effectiveRange);
         int hits=0;
         for(LivingEntity target:level.getEntitiesOfClass(LivingEntity.class,box,e->e!=player&&e.isAlive()&&!e.isSpectator())){
@@ -342,35 +346,72 @@ public final class ElementalAbilityService {
             if (a == ElementalAbility.AIR_JUMP) airDebris(level, player.position(), 1.9, 28, 0.62);
             if (a == ElementalAbility.AIR_SHIELD) airDebris(level, player.position(), 1.55, 22, 0.28);
         }));
-        // Terrain formations rise in nine timed stages instead of appearing as one instant block.
-        for (int structureStep = 0; structureStep < 9; structureStep++) {
-            final int stage = structureStep;
-            int structureTick = a == ElementalAbility.STONE_WALL ? 26 + stage * 6 : 6 + stage * 2;
-            cues.add(new ScheduledCue(structureTick, () -> {
-                placeEnvironmentalStructure(player, level, a, origin, look, rightBasis, stage);
-                if (stage == 0) {
-                    emitElement(level, a.element(), origin.add(look.scale(0.75)),
-                            18, 0.26, 0.28, 0.26, 0.035);
+        if (a == ElementalAbility.EARTHQUAKE) {
+            // The warning cracks precede the impact. Three expanding wavefronts then
+            // propagate over the same six terrain rings. The first wave cuts permanent
+            // fissures; subsequent waves revisit the damage rings without deleting more terrain.
+            Set<BlockPos> permanentlyFissured = new HashSet<>();
+            Set<UUID> targetsHit = new HashSet<>();
+            for (int wave = 0; wave < 3; wave++) {
+                for (int ringStep = 0; ringStep < 6; ringStep++) {
+                    final int waveIndex = wave;
+                    final int stage = ringStep;
+                    final int waveTick = 76 + waveIndex * 18 + stage * 2;
+                    cues.add(new ScheduledCue(waveTick, () -> {
+                        if (waveIndex == 0) {
+                            createEarthquakeFissureStage(level, player, rightBasis,
+                                    stage, permanentlyFissured);
+                        }
+                        int hits = applyEarthquakeRing(level, player, waveIndex, stage, targetsHit);
+                        Vec3 pulseCenter = player.position().add(0.0D, 0.08D, 0.0D);
+                        emit(level, ParticleTypes.POOF, pulseCenter, 20,
+                                0.65D + stage * 0.18D, 0.08D, 0.65D + stage * 0.18D, 0.08D);
+                        if (Boolean.getBoolean("elemental.vfx.smoke")) {
+                            System.out.println("[ELEMENTAL_STONE_SMOKE] EARTHQUAKE_RING wave="
+                                    + (waveIndex + 1) + " stage=" + (stage + 1)
+                                    + " hits=" + hits + " fissures=" + permanentlyFissured.size());
+                        }
+                        if (waveIndex == 2 && stage == 5 && !targetsHit.isEmpty()) {
+                            ElementalWorldData.get(level.getServer()).addXp(player.getUUID(),
+                                    a.xpReward() * targetsHit.size());
+                        }
+                    }));
                 }
-            }));
+            }
+        } else {
+            // Other terrain formations rise in nine timed stages instead of appearing at once.
+            for (int structureStep = 0; structureStep < 9; structureStep++) {
+                final int stage = structureStep;
+                int structureTick = a == ElementalAbility.STONE_WALL ? 26 + stage * 6 : 6 + stage * 2;
+                cues.add(new ScheduledCue(structureTick, () -> {
+                    placeEnvironmentalStructure(player, level, a, origin, look, rightBasis, stage);
+                    if (stage == 0) {
+                        emitElement(level, a.element(), origin.add(look.scale(0.75)),
+                                18, 0.26, 0.28, 0.26, 0.035);
+                    }
+                }));
+            }
         }
         for(int segment=1;segment<=9;segment++){
             final int step=segment;
-            int segmentTick = a == ElementalAbility.STONE_WALL ? 26 + step * 6 : 6 + step * 2;
+            int segmentTick = a == ElementalAbility.STONE_WALL ? 26 + step * 6
+                    : a == ElementalAbility.EARTHQUAKE ? 36 + step * 10 : 6 + step * 2;
             cues.add(new ScheduledCue(segmentTick,()->renderTechniqueSegment(
                     level,player,a,origin,look,rightBasis,upBasis,step,waterAffinity)));
         }
-        cues.add(new ScheduledCue(27,()->{
-            Vec3 impactPoint=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
-            impact(level,a,impactPoint);
-            debris(level,impactPoint,a.element(),24);
-            emitElement(level,a.element(),impactPoint,20,0.72,0.48,0.72,0.055);
-        }));
-        cues.add(new ScheduledCue(34,()->{
-            Vec3 end=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
-            emit(level,ParticleTypes.CLOUD,end,12,0.45,0.28,0.45,0.015);
-            emitElement(level,a.element(),end,10,0.38,0.3,0.38,0.012);
-        }));
+        if (a != ElementalAbility.EARTHQUAKE) {
+            cues.add(new ScheduledCue(27,()->{
+                Vec3 impactPoint=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
+                impact(level,a,impactPoint);
+                debris(level,impactPoint,a.element(),24);
+                emitElement(level,a.element(),impactPoint,20,0.72,0.48,0.72,0.055);
+            }));
+            cues.add(new ScheduledCue(34,()->{
+                Vec3 end=origin.add(look.scale(Math.min(a.range()*0.78,7.5)));
+                emit(level,ParticleTypes.CLOUD,end,12,0.45,0.28,0.45,0.015);
+                emitElement(level,a.element(),end,10,0.38,0.3,0.38,0.012);
+            }));
+        }
 
         int startTick=player.tickCount;
         List<ScheduledCue> timed=new ArrayList<>();
@@ -639,6 +680,101 @@ public final class ElementalAbilityService {
     }
 
     /**
+     * Removes a narrow, branching line of natural surface blocks. These cuts are permanent
+     * world edits: no timer, client-only mesh or reconnect cleanup restores them.
+     */
+    private static void createEarthquakeFissureStage(ServerLevel level, ServerPlayer player,
+                                                     Vec3 right, int stage, Set<BlockPos> modified) {
+        final int branches = 6;
+        final int maxBlocks = 72;
+        for (int branch = 0; branch < branches && modified.size() < maxBlocks; branch++) {
+            double angle = Math.PI * 2.0D * branch / branches
+                    + Math.sin(stage * 0.83D + branch * 1.7D) * 0.045D;
+            double perpendicularJitter = Math.sin(stage * 1.31D + branch * 2.17D) * 0.26D;
+
+            // Two adjacent cuts per branch and ring keep the fissure connected at voxel scale.
+            for (int sample = 0; sample < 2 && modified.size() < maxBlocks; sample++) {
+                double distance = stage * 2.0D + 0.62D + sample * 0.82D;
+                double x = player.getX() + Math.cos(angle) * distance
+                        + Math.cos(angle + Math.PI / 2.0D) * perpendicularJitter;
+                double z = player.getZ() + Math.sin(angle) * distance
+                        + Math.sin(angle + Math.PI / 2.0D) * perpendicularJitter;
+                BlockPos ground = surfaceBlock(level, new Vec3(x, player.getY(), z)).below();
+                if (!level.hasChunkAt(ground) || ground.getY() <= level.getMinBuildHeight()
+                        || !player.mayInteract(level, ground)
+                        || level.getBlockEntity(ground) != null
+                        || !modified.add(ground)) {
+                    continue;
+                }
+
+                BlockState surface = level.getBlockState(ground);
+                if (!isEarthquakeBreakableTerrain(surface)) {
+                    modified.remove(ground);
+                    continue;
+                }
+
+                // The fracture is a one-block-deep open cut, not a temporary cobblestone spike.
+                ParticleOptions fragments = new BlockParticleOption(ParticleTypes.BLOCK, surface);
+                Vec3 fragmentOrigin = new Vec3(ground.getX() + 0.5D,
+                        ground.getY() + 0.55D, ground.getZ() + 0.5D);
+                emit(level, fragments, fragmentOrigin, 9, 0.18D, 0.12D, 0.18D, 0.13D);
+                if (level.destroyBlock(ground, false, player)
+                        && Boolean.getBoolean("elemental.vfx.smoke")) {
+                    System.out.println("[ELEMENTAL_STONE_SMOKE] PERMANENT_FISSURE_REMOVED"
+                            + " stage=" + (stage + 1) + " pos=" + ground
+                            + " material=" + surface.getBlock());
+                }
+            }
+        }
+    }
+
+    private static boolean isEarthquakeBreakableTerrain(BlockState state) {
+        return state.is(Blocks.STONE) || state.is(Blocks.GRANITE) || state.is(Blocks.DIORITE)
+                || state.is(Blocks.ANDESITE) || state.is(Blocks.DEEPSLATE)
+                || state.is(Blocks.COBBLESTONE) || state.is(Blocks.COBBLED_DEEPSLATE)
+                || state.is(Blocks.TUFF) || state.is(Blocks.DIRT) || state.is(Blocks.COARSE_DIRT)
+                || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.GRASS_BLOCK)
+                || state.is(Blocks.PODZOL) || state.is(Blocks.MYCELIUM)
+                || state.is(Blocks.GRAVEL) || state.is(Blocks.SAND) || state.is(Blocks.RED_SAND)
+                || state.is(Blocks.SANDSTONE) || state.is(Blocks.RED_SANDSTONE)
+                || state.is(Blocks.MUD) || state.is(Blocks.CLAY)
+                || state.is(Blocks.NETHERRACK) || state.is(Blocks.BASALT)
+                || state.is(Blocks.BLACKSTONE) || state.is(Blocks.END_STONE);
+    }
+
+    /** Applies one advancing annulus of the earthquake to grounded and airborne entities. */
+    private static int applyEarthquakeRing(ServerLevel level, ServerPlayer player,
+                                           int wave, int ringStep, Set<UUID> targetsHit) {
+        double innerRadius = ringStep * 2.0D;
+        double outerRadius = innerRadius + 2.0D;
+        AABB area = player.getBoundingBox().inflate(13.0D, 5.0D, 13.0D);
+        int hits = 0;
+
+        for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, area,
+                entity -> entity != player && entity.isAlive() && !entity.isSpectator())) {
+            Vec3 offset = target.getBoundingBox().getCenter().subtract(player.position());
+            double distance = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
+            if (distance <= innerRadius || distance > outerRadius) continue;
+
+            float damage = target.onGround() ? 4.0F : 2.0F;
+            if (!target.hurtServer(level, player.damageSources().playerAttack(player), damage)) continue;
+            hits++;
+            targetsHit.add(target.getUUID());
+
+            Vec3 horizontal = new Vec3(offset.x, 0.0D, offset.z);
+            if (horizontal.lengthSqr() < 0.0001D) horizontal = new Vec3(1.0D, 0.0D, 0.0D);
+            horizontal = horizontal.normalize();
+            double shove = target.onGround() ? 0.78D : 0.28D;
+            double lift = target.onGround() ? 0.52D : 0.16D;
+            target.push(horizontal.x * shove, lift, horizontal.z * shove);
+            emitElement(level, Element.STONE,
+                    target.position().add(0.0D, target.getBbHeight() * 0.45D, 0.0D),
+                    16, 0.24D, 0.24D, 0.24D, 0.07D);
+        }
+        return hits;
+    }
+
+    /**
      * Temporary Stone structures are built only into air above solid terrain.
      * Existing blocks, containers and protected terrain are never replaced.
      */
@@ -679,20 +815,19 @@ public final class ElementalAbilityService {
                     positions.add(surfaceBlock(level, cap).above(3));
                 }
             }
-            case SEISMIC_WAVE, EARTHQUAKE -> {
+            case SEISMIC_WAVE -> {
                 material = Blocks.COBBLESTONE.defaultBlockState();
                 lifetime = 40;
                 for (int step = 1; step <= 6; step++) {
                     Vec3 impact = player.position().add(look.scale(step * 1.05D));
-                    int sideLimit = ability == ElementalAbility.EARTHQUAKE ? 1 : 0;
-                    for (int side = -sideLimit; side <= sideLimit; side++) {
-                        BlockPos base = surfaceBlock(level, impact.add(right.scale(side * 0.72D)));
-                        positions.add(base);
-                        if (ability == ElementalAbility.EARTHQUAKE && step % 2 == 0) {
-                            positions.add(base.above());
-                        }
-                    }
+                    BlockPos base = surfaceBlock(level, impact);
+                    positions.add(base);
                 }
+            }
+            case EARTHQUAKE -> {
+                // Permanent terrain fractures are cut by createEarthquakeFissureStage,
+                // not by the temporary structure queue.
+                return;
             }
             default -> {
                 return;
