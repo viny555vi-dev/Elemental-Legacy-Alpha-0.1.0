@@ -80,6 +80,8 @@ public final class ElementalAbilityService {
 
     private static int applyCombat(ServerLevel level,ServerPlayer player,ElementalAbility a,Vec3 origin,Vec3 look,float waterAffinity){
         double effectiveRange=a.range()*(1.0D+(waterAffinity-1.0D)*0.28D);
+        // A wall is a structure and armor is a defensive state: neither is a radial/front-cone attack.
+        if (a == ElementalAbility.STONE_WALL || a == ElementalAbility.STONE_ARMOR) return 0;
         AABB box=player.getBoundingBox().inflate(effectiveRange,Math.max(3,effectiveRange*0.55),effectiveRange);
         int hits=0;
         for(LivingEntity target:level.getEntitiesOfClass(LivingEntity.class,box,e->e!=player&&e.isAlive()&&!e.isSpectator())){
@@ -342,7 +344,8 @@ public final class ElementalAbilityService {
         // Terrain formations rise in nine timed stages instead of appearing as one instant block.
         for (int structureStep = 0; structureStep < 9; structureStep++) {
             final int stage = structureStep;
-            cues.add(new ScheduledCue(6 + stage * 2, () -> {
+            int structureTick = a == ElementalAbility.STONE_WALL ? 26 + stage * 6 : 6 + stage * 2;
+            cues.add(new ScheduledCue(structureTick, () -> {
                 placeEnvironmentalStructure(player, level, a, origin, look, rightBasis, stage);
                 if (stage == 0) {
                     emitElement(level, a.element(), origin.add(look.scale(0.75)),
@@ -352,7 +355,8 @@ public final class ElementalAbilityService {
         }
         for(int segment=1;segment<=9;segment++){
             final int step=segment;
-            cues.add(new ScheduledCue(6+step*2,()->renderTechniqueSegment(
+            int segmentTick = a == ElementalAbility.STONE_WALL ? 26 + step * 6 : 6 + step * 2;
+            cues.add(new ScheduledCue(segmentTick,()->renderTechniqueSegment(
                     level,player,a,origin,look,rightBasis,upBasis,step,waterAffinity)));
         }
         cues.add(new ScheduledCue(27,()->{
@@ -640,15 +644,17 @@ public final class ElementalAbilityService {
     private static void placeEnvironmentalStructure(ServerPlayer player, ServerLevel level,
                                                     ElementalAbility ability, Vec3 origin,
                                                     Vec3 look, Vec3 right, int stage) {
-        Vec3 center = player.position().add(look.scale(3.2));
+        Vec3 castBase = new Vec3(origin.x, origin.y - player.getEyeHeight(), origin.z);
+        Vec3 center = castBase.add(look.scale(3.2));
         List<BlockPos> positions = new ArrayList<>();
         BlockState material;
         int lifetime = 60;
+        boolean permanent = ability == ElementalAbility.STONE_WALL;
 
         switch (ability) {
             case STONE_WALL -> {
                 material = Blocks.STONE.defaultBlockState();
-                Vec3 wall = player.position().add(look.scale(3.0));
+                Vec3 wall = castBase.add(look.scale(3.0));
                 for (int column = -3; column <= 3; column++) {
                     BlockPos base = surfaceBlock(level, wall.add(right.scale(column * 0.9)));
                     for (int row = 0; row < 4; row++) positions.add(base.above(row));
@@ -692,21 +698,26 @@ public final class ElementalAbilityService {
             }
         }
 
-        List<TemporaryBlock> placedBlocks = TEMPORARY_BLOCKS.computeIfAbsent(
+        List<TemporaryBlock> placedBlocks = permanent ? null : TEMPORARY_BLOCKS.computeIfAbsent(
                 player.getUUID(), ignored -> new ArrayList<>());
         int from = positions.size() * stage / 9;
         int to = positions.size() * (stage + 1) / 9;
         for (int index = from; index < to; index++) {
             BlockPos pos = positions.get(index);
-            if (!level.hasChunkAt(pos) || !level.isEmptyBlock(pos) || level.getBlockEntity(pos) != null) continue;
+            if (!level.hasChunkAt(pos) || !level.isEmptyBlock(pos) || !level.getFluidState(pos).isEmpty()
+                    || level.getBlockEntity(pos) != null) continue;
             if (!level.getBlockState(pos.below()).isSolid()) continue;
             AABB occupied = new AABB(pos.getX(), pos.getY(), pos.getZ(),
                     pos.getX() + 1.0D, pos.getY() + 1.0D, pos.getZ() + 1.0D);
             if (player.getBoundingBox().intersects(occupied)) continue;
             BlockState previous = level.getBlockState(pos);
             if (level.setBlock(pos, material, 3)) {
-                placedBlocks.add(new TemporaryBlock(level, pos, previous, material,
-                        level.getGameTime() + lifetime, ability.id()));
+                // Stone Wall is an actual permanent construction. It is deliberately
+                // excluded from TEMPORARY_BLOCKS, so no animation timer can erase it.
+                if (!permanent) {
+                    placedBlocks.add(new TemporaryBlock(level, pos, previous, material,
+                            level.getGameTime() + lifetime, ability.id()));
+                }
                 if (Boolean.getBoolean("elemental.vfx.smoke")) {
                     System.out.println("[ELEMENTAL_STONE_SMOKE] BLOCK_PLACED ability="
                             + ability.id() + " pos=" + pos);
