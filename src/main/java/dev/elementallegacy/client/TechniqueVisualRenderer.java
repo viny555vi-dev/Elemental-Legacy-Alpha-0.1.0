@@ -947,11 +947,24 @@ public final class TechniqueVisualRenderer {
      */
     private static void seismicWaveFront(ActiveEffect fx, float t,
                                          PoseStack.Pose pose, VertexConsumer out) {
-        float travel = ease(clamp(t / 0.55F));
-        float settle = 1.0F - ease(clamp((t - 0.60F) / 0.18F));
+        // Match the server's nine collision/terrain steps exactly: tick 42 through tick 66.
+        // The old renderer advanced from cast time and reached the far end before the
+        // server-side wave began, so the visible crest and actual terrain interaction diverged.
+        float elapsedTicks = t * TechniqueTimeline.durationTicks("seismic_wave");
+        float firstStepTick = TechniqueTimeline.SEISMIC_WAVE_START_TICK;
+        float lastStepTick = firstStepTick
+                + (TechniqueTimeline.SEISMIC_WAVE_STEP_COUNT - 1)
+                * TechniqueTimeline.SEISMIC_WAVE_STEP_INTERVAL_TICKS;
+        if (elapsedTicks < firstStepTick) return;
+
+        float travel = clamp((elapsedTicks - firstStepTick) / (lastStepTick - firstStepTick));
+        float fadeStartTick = lastStepTick + 2.0F;
+        float settle = 1.0F - ease(clamp(
+                (elapsedTicks - fadeStartTick) / TechniqueTimeline.SEISMIC_WAVE_BLOCK_LIFETIME_TICKS));
         if (settle <= 0.001F) return;
 
-        double frontDistance = 0.70D + travel * 8.25D;
+        double frontDistance = TechniqueTimeline.SEISMIC_WAVE_STEP_DISTANCE
+                * (1.0D + travel * (TechniqueTimeline.SEISMIC_WAVE_STEP_COUNT - 1));
         List<Vec3> crest = new ArrayList<>();
         List<Vec3> footing = new ArrayList<>();
 
@@ -959,7 +972,7 @@ public final class TechniqueVisualRenderer {
         for (int lane = -4; lane <= 4; lane++) {
             double side = lane * 0.58D;
             double ground = terrainOffset(fx, side, frontDistance);
-            double phase = t * 18.0D + lane * 0.91D;
+            double phase = travel * 6.0D + lane * 0.91D;
             double lift = (0.16D + Math.max(0.0D, Math.sin(phase)) * 0.62D) * settle;
             double tilt = Math.sin(phase * 0.67D) * 0.16D;
             Vec3 slabCenter = point(fx, side + tilt, ground + 0.10D + lift,

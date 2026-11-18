@@ -383,9 +383,10 @@ public final class ElementalAbilityService {
             }
         } else if (a == ElementalAbility.SEISMIC_WAVE) {
             Set<UUID> targetsHit = new HashSet<>();
-            for (int waveStep = 1; waveStep <= 9; waveStep++) {
+            for (int waveStep = 1; waveStep <= TechniqueTimeline.SEISMIC_WAVE_STEP_COUNT; waveStep++) {
                 final int step = waveStep;
-                final int waveTick = 42 + (step - 1) * 3;
+                final int waveTick = TechniqueTimeline.SEISMIC_WAVE_START_TICK
+                        + (step - 1) * TechniqueTimeline.SEISMIC_WAVE_STEP_INTERVAL_TICKS;
                 cues.add(new ScheduledCue(waveTick, () -> {
                     int hits = applySeismicWaveStep(level, player, castEpicenter, look,
                             rightBasis, step, targetsHit);
@@ -418,7 +419,8 @@ public final class ElementalAbilityService {
             final int step=segment;
             int segmentTick = a == ElementalAbility.STONE_WALL ? 26 + step * 6
                     : a == ElementalAbility.EARTHQUAKE ? 36 + step * 10
-                    : a == ElementalAbility.SEISMIC_WAVE ? 42 + (step - 1) * 3
+                    : a == ElementalAbility.SEISMIC_WAVE ? TechniqueTimeline.SEISMIC_WAVE_START_TICK
+                            + (step - 1) * TechniqueTimeline.SEISMIC_WAVE_STEP_INTERVAL_TICKS
                     : 6 + step * 2;
             cues.add(new ScheduledCue(segmentTick,()->renderTechniqueSegment(
                     level,player,a,origin,look,rightBasis,upBasis,step,waterAffinity)));
@@ -713,7 +715,7 @@ public final class ElementalAbilityService {
         if (forward.lengthSqr() < 0.0001D) forward = new Vec3(0.0D, 0.0D, 1.0D);
         else forward = forward.normalize();
         Vec3 lateral = new Vec3(-forward.z, 0.0D, forward.x);
-        double frontDistance = step * 0.92D;
+        double frontDistance = step * TechniqueTimeline.SEISMIC_WAVE_STEP_DISTANCE;
         AABB area = new AABB(epicenter.x - 10.0D, epicenter.y - 4.0D, epicenter.z - 10.0D,
                 epicenter.x + 10.0D, epicenter.y + 5.0D, epicenter.z + 10.0D);
         int hits = 0;
@@ -767,7 +769,7 @@ public final class ElementalAbilityService {
         if (forward.lengthSqr() < 0.0001D) forward = new Vec3(0.0D, 0.0D, 1.0D);
         else forward = forward.normalize();
         Vec3 lateral = new Vec3(-forward.z, 0.0D, forward.x);
-        Vec3 front = epicenter.add(forward.scale(step * 0.92D));
+        Vec3 front = epicenter.add(forward.scale(step * TechniqueTimeline.SEISMIC_WAVE_STEP_DISTANCE));
         List<BlockPos> candidates = new ArrayList<>();
         candidates.add(surfaceBlock(level, front));
         candidates.add(surfaceBlock(level, front.add(lateral.scale(0.9D))));
@@ -787,7 +789,8 @@ public final class ElementalAbilityService {
             BlockState previous = level.getBlockState(pos);
             if (level.setBlock(pos, material, 3)) {
                 owned.add(new TemporaryBlock(level, pos, previous, material,
-                        level.getGameTime() + 40L, ElementalAbility.SEISMIC_WAVE.id()));
+                        level.getGameTime() + TechniqueTimeline.SEISMIC_WAVE_BLOCK_LIFETIME_TICKS,
+                        ElementalAbility.SEISMIC_WAVE.id()));
                 if (Boolean.getBoolean("elemental.vfx.smoke")) {
                     System.out.println("[ELEMENTAL_STONE_SMOKE] SEISMIC_RIDGE_BLOCK pos=" + pos
                             + " step=" + step);

@@ -9,6 +9,13 @@ package dev.elementallegacy.ability;
 public final class TechniqueTimeline {
     private TechniqueTimeline() {}
 
+    // Shared server/client progression for the advancing Seismic Wave front.
+    public static final int SEISMIC_WAVE_START_TICK = 42;
+    public static final int SEISMIC_WAVE_STEP_INTERVAL_TICKS = 3;
+    public static final int SEISMIC_WAVE_STEP_COUNT = 9;
+    public static final int SEISMIC_WAVE_BLOCK_LIFETIME_TICKS = 40;
+    public static final double SEISMIC_WAVE_STEP_DISTANCE = 0.92D;
+
     public static int durationTicks(String abilityId) {
         if (abilityId == null) return 48;
         return switch (abilityId) {
