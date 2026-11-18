@@ -3,6 +3,7 @@ package dev.elementallegacy.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import dev.elementallegacy.ElementalLegacy;
+import dev.elementallegacy.ability.TechniqueTimeline;
 import dev.elementallegacy.element.WaterAffinity;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
@@ -56,18 +57,6 @@ public final class TechniqueVisualRenderer {
         }
         return RenderTypes.entityTranslucent(AIR_TEXTURE);
     }
-    private static int durationTicksFor(String abilityId) {
-        return switch (abilityId) {
-            case "stone_wall" -> 180;
-            case "ice_bind" -> 140;
-            case "rock_cage" -> 120;
-            case "stone_armor" -> 220;
-            case "water_shield", "air_shield" -> 120;
-            case "earthquake" -> 96;
-            case "seismic_wave" -> 72;
-            default -> DURATION_TICKS;
-        };
-    }
     private static final Map<Integer, ActiveEffect> ACTIVE = new HashMap<>();
     private static final Set<String> SMOKE_MESHES_SUBMITTED = new HashSet<>();
     private static boolean smokeRockThrowWakeLogged;
@@ -117,7 +106,7 @@ public final class TechniqueVisualRenderer {
                     abilityId, waterAffinity, entity.isSwimming(), entity.isUnderWater(), entity.isInWater());
         }
         ACTIVE.put(entityId, new ActiveEffect(abilityId, origin, forward, right, mc.level.getGameTime(),
-                durationTicksFor(abilityId), waterAffinity));
+                TechniqueTimeline.durationTicks(abilityId), waterAffinity));
     }
 
     @SubscribeEvent
@@ -135,7 +124,8 @@ public final class TechniqueVisualRenderer {
         Iterator<Map.Entry<Integer, ActiveEffect>> iterator = ACTIVE.entrySet().iterator();
 
         while (iterator.hasNext()) {
-            ActiveEffect effect = iterator.next().getValue();
+            Map.Entry<Integer, ActiveEffect> entry = iterator.next();
+            ActiveEffect effect = entry.getValue();
             float progress = (float) ((gameTime + partial - effect.startedAt()) / effect.durationTicks());
             if (progress >= 1.0F) {
                 iterator.remove();
@@ -143,14 +133,33 @@ public final class TechniqueVisualRenderer {
             }
             if (progress < 0.0F) continue;
 
+            ActiveEffect current = effect;
+            // Stone armor is body equipment, not a world-space object. Re-anchor it
+            // to the caster every rendered frame so walking and turning cannot leave
+            // the plates suspended at the cast position.
+            if ("stone_armor".equals(effect.abilityId())) {
+                Entity caster = mc.level.getEntity(entry.getKey());
+                if (caster == null || !caster.isAlive()) {
+                    iterator.remove();
+                    continue;
+                }
+                Vec3 facing = caster.getLookAngle().normalize();
+                Vec3 right = new Vec3(-facing.z, 0.0D, facing.x);
+                if (right.lengthSqr() < 0.0001D) right = new Vec3(1.0D, 0.0D, 0.0D);
+                else right = right.normalize();
+                Vec3 anchor = caster.position().add(0.0D,
+                        Math.max(0.8D, caster.getBbHeight() * 0.62D), 0.0D);
+                current = new ActiveEffect(effect.abilityId(), anchor, facing, right,
+                        effect.startedAt(), effect.durationTicks(), effect.waterAffinity());
+            }
+
             PoseStack poseStack = event.getPoseStack();
             poseStack.pushPose();
             poseStack.translate(
-                    effect.origin().x - camera.x,
-                    effect.origin().y - camera.y,
-                    effect.origin().z - camera.z
+                    current.origin().x - camera.x,
+                    current.origin().y - camera.y,
+                    current.origin().z - camera.z
             );
-            ActiveEffect current = effect;
             if(current.waterAffinity()>1.001F){
                 float scale=1.0F+(current.waterAffinity()-1.0F)*0.70F;
                 poseStack.scale(scale,scale,scale);
@@ -276,7 +285,7 @@ public final class TechniqueVisualRenderer {
         start(mc.player.getId(), ability);
         PlayerAbilityAnimator.start(mc.player.getId(), ability);
         System.out.println("[ELEMENTAL_VFX_SMOKE] " + ability + " (" + smokeIndex + "/24)");
-        smokeNextTick = mc.player.tickCount + durationTicksFor(ability) + 5;
+        smokeNextTick = mc.player.tickCount + TechniqueTimeline.durationTicks(ability) + 5;
     }
 
     private static CameraType smokeCameraFor(String abilityId) {
@@ -786,9 +795,10 @@ public final class TechniqueVisualRenderer {
      * and crenellations give the wall a recognisable fortress silhouette.
      */
     private static void stoneWall(ActiveEffect fx, float t, PoseStack.Pose pose, VertexConsumer out) {
-        float build = ease(clamp(t / 0.20F));
-        float retract = 1.0F - ease(clamp((t - 0.91F) / 0.09F));
-        float formed = build * retract;
+        // The server places the real wall in stages from 1.3s to ~3.8s.
+        // This client mesh follows the same construction window and never retracts:
+        // after the build effect ends, the persistent world blocks remain.
+        float formed = ease(clamp((t - 0.20F) / 0.51F));
         final double forward = 3.8;
         final double courseHeight = 0.69;
         List<Vec3> crownLine = new ArrayList<>();
