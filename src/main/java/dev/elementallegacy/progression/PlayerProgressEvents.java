@@ -15,7 +15,8 @@ public final class PlayerProgressEvents {
         // Visual timelines advance every tick; gameplay regeneration remains once per second.
         ElementalAbilityService.tick(player);
         StoneArmorService.tick(player);
-        if (player.tickCount % 20 != 0 || ElementalAbilityService.isRegenerationPaused(player)) return;
+        if (player.tickCount % 20 != 0 || ElementalAbilityService.isRegenerationPaused(player)
+                || StoneArmorService.isActive(player)) return;
 
         // Combat recovery is deliberately slower than exploration recovery.
         float regeneration = player.hurtTime > 0 ? 2.0F : 4.0F;
