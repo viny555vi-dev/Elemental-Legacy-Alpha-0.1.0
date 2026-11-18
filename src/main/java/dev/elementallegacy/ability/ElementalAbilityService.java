@@ -325,6 +325,9 @@ public final class ElementalAbilityService {
         Vec3 hands=origin.add(look.scale(0.38)).add(0,-0.38,0);
         final Vec3 rightBasis=right;
         final Vec3 upBasis=up;
+        // Long-lived ground techniques use the cast-time epicenter. The player may
+        // move during recovery; the fracture and wavefronts must not follow them.
+        final Vec3 castEpicenter = player.position();
         List<ScheduledCue> cues=new ArrayList<>();
 
         // Five distinct stages: gather, shape, travelling release, impact, and dissipate.
@@ -359,11 +362,11 @@ public final class ElementalAbilityService {
                     final int waveTick = 76 + waveIndex * 18 + stage * 2;
                     cues.add(new ScheduledCue(waveTick, () -> {
                         if (waveIndex == 0) {
-                            createEarthquakeFissureStage(level, player, rightBasis,
+                            createEarthquakeFissureStage(level, player, castEpicenter, rightBasis,
                                     stage, permanentlyFissured);
                         }
-                        int hits = applyEarthquakeRing(level, player, waveIndex, stage, targetsHit);
-                        Vec3 pulseCenter = player.position().add(0.0D, 0.08D, 0.0D);
+                        int hits = applyEarthquakeRing(level, player, castEpicenter, waveIndex, stage, targetsHit);
+                        Vec3 pulseCenter = castEpicenter.add(0.0D, 0.08D, 0.0D);
                         emit(level, ParticleTypes.POOF, pulseCenter, 20,
                                 0.65D + stage * 0.18D, 0.08D, 0.65D + stage * 0.18D, 0.08D);
                         if (Boolean.getBoolean("elemental.vfx.smoke")) {
@@ -684,7 +687,7 @@ public final class ElementalAbilityService {
      * world edits: no timer, client-only mesh or reconnect cleanup restores them.
      */
     private static void createEarthquakeFissureStage(ServerLevel level, ServerPlayer player,
-                                                     Vec3 right, int stage, Set<BlockPos> modified) {
+                                                     Vec3 epicenter, Vec3 right, int stage, Set<BlockPos> modified) {
         final int branches = 6;
         final int maxBlocks = 72;
         for (int branch = 0; branch < branches && modified.size() < maxBlocks; branch++) {
@@ -695,9 +698,9 @@ public final class ElementalAbilityService {
             // Two adjacent cuts per branch and ring keep the fissure connected at voxel scale.
             for (int sample = 0; sample < 2 && modified.size() < maxBlocks; sample++) {
                 double distance = stage * 2.0D + 0.62D + sample * 0.82D;
-                double x = player.getX() + Math.cos(angle) * distance
+                double x = epicenter.x + Math.cos(angle) * distance
                         + Math.cos(angle + Math.PI / 2.0D) * perpendicularJitter;
-                double z = player.getZ() + Math.sin(angle) * distance
+                double z = epicenter.z + Math.sin(angle) * distance
                         + Math.sin(angle + Math.PI / 2.0D) * perpendicularJitter;
                 BlockPos ground = surfaceBlock(level, new Vec3(x, player.getY(), z)).below();
                 if (!level.hasChunkAt(ground) || level.isOutsideBuildHeight(ground)
@@ -743,7 +746,7 @@ public final class ElementalAbilityService {
     }
 
     /** Applies one advancing annulus of the earthquake to grounded and airborne entities. */
-    private static int applyEarthquakeRing(ServerLevel level, ServerPlayer player,
+    private static int applyEarthquakeRing(ServerLevel level, ServerPlayer player, Vec3 epicenter,
                                            int wave, int ringStep, Set<UUID> targetsHit) {
         double innerRadius = ringStep * 2.0D;
         double outerRadius = innerRadius + 2.0D;
@@ -752,7 +755,7 @@ public final class ElementalAbilityService {
 
         for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, area,
                 entity -> entity != player && entity.isAlive() && !entity.isSpectator())) {
-            Vec3 offset = target.getBoundingBox().getCenter().subtract(player.position());
+            Vec3 offset = target.getBoundingBox().getCenter().subtract(epicenter);
             double distance = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
             if (distance <= innerRadius || distance > outerRadius) continue;
 
