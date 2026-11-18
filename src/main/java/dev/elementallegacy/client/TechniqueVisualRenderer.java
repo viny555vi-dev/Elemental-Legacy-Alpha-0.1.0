@@ -168,10 +168,13 @@ public final class TechniqueVisualRenderer {
             if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_MESHES_SUBMITTED.add(effect.abilityId())) {
                 System.out.println("[ELEMENTAL_VFX_SMOKE] MESH_SUBMIT " + effect.abilityId());
             }
+            // Capture immutable values for the deferred geometry callback.
+            final ActiveEffect renderEffect = current;
+            final float renderTime = time;
             event.getSubmitNodeCollector().submitCustomGeometry(
                     poseStack,
-                    materialType(current.abilityId()),
-                    (pose, buffer) -> render(current, time, pose, buffer)
+                    materialType(renderEffect.abilityId()),
+                    (pose, buffer) -> render(renderEffect, renderTime, pose, buffer)
             );
             poseStack.popPose();
         }
