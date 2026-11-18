@@ -468,7 +468,7 @@ jobs:
             CLIENT_PID=$!
 
             # Dismiss the first-run accessibility welcome screen before quick-play connects.
-            # On Minecraft 26.3 the modal's initial keyboard focus can remain on Narrator,
+            # On Minecraft 26.3 the initial modal keyboard focus can remain on Narrator,
             # so a blind Tab sequence is not reliable in headless SDL/X11. Focus the actual
             # game window and click the fixed Continue button in the 1280x720 client viewport.
             for i in $(seq 1 60); do
@@ -488,7 +488,7 @@ jobs:
                     echo "Client process environment:"
                     for pid in $(pgrep -f "net.neoforged.devlaunch.Main|net.neoforged.fml.startup.Client" || true); do
                       echo "PID=$pid"
-                      tr '\\0' '\\n' < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER)=" || true
+                      tr "\\0" "\\n" < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER)=" || true
                     done
                   else
                     echo "Gradle client wrapper exited before creating a window."
