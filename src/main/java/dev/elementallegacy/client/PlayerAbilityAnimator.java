@@ -1,6 +1,7 @@
 package dev.elementallegacy.client;
 
 import dev.elementallegacy.ElementalLegacy;
+import dev.elementallegacy.ability.TechniqueTimeline;
 import dev.elementallegacy.ability.ElementalAbility;
 import dev.elementallegacy.element.WaterAffinity;
 import net.minecraft.client.Minecraft;
@@ -26,7 +27,6 @@ import java.util.Set;
  */
 @EventBusSubscriber(modid = ElementalLegacy.MOD_ID, value = Dist.CLIENT)
 public final class PlayerAbilityAnimator {
-    private static final int DURATION_TICKS = 38;
     private static final Map<Integer, ActiveAnimation> ACTIVE = new HashMap<>();
     private static final Map<Integer, ModelPose> MODEL_POSES = new HashMap<>();
     private static final Set<String> SMOKE_POSES_APPLIED = new HashSet<>();
@@ -37,7 +37,8 @@ public final class PlayerAbilityAnimator {
     private static final Map<String, Set<Integer>> SMOKE_POSE_SAMPLE_BUCKETS = new HashMap<>();
     private static PoseSnapshot SMOKE_NEUTRAL_POSE;
 
-    private record ActiveAnimation(String abilityId, long startedAt, float waterAffinity) {}
+    private record ActiveAnimation(String abilityId, long startedAt, int durationTicks, float waterAffinity) {}
+    private record MotionEnvelope(float charge, float release, float pulse, float recovery) {}
     private record ModelPose(
             float torsoPitchDegrees, float torsoYawDegrees, float torsoRollDegrees,
             float armPitchDegrees, float armYawDegrees, float armRollDegrees, float armSwingDegrees,
@@ -87,7 +88,8 @@ public final class PlayerAbilityAnimator {
                     abilityId, waterAffinity, entity != null && entity.isSwimming(),
                     entity != null && entity.isInWater(), entity != null && entity.isUnderWater());
         }
-        ACTIVE.put(entityId, new ActiveAnimation(abilityId, minecraft.level.getGameTime(), waterAffinity));
+        ACTIVE.put(entityId, new ActiveAnimation(abilityId, minecraft.level.getGameTime(),
+                TechniqueTimeline.durationTicks(abilityId), waterAffinity));
     }
 
     private static float progress(int entityId, float partialTick) {
@@ -95,7 +97,7 @@ public final class PlayerAbilityAnimator {
         if (minecraft.level == null) return -1.0F;
         ActiveAnimation animation = ACTIVE.get(entityId);
         if (animation == null) return -1.0F;
-        float value = (float) ((minecraft.level.getGameTime() + partialTick - animation.startedAt()) / DURATION_TICKS);
+        float value = (float) ((minecraft.level.getGameTime() + partialTick - animation.startedAt()) / animation.durationTicks());
         if (value >= 1.0F) {
             ACTIVE.remove(entityId);
             MODEL_POSES.remove(entityId);
@@ -113,7 +115,7 @@ public final class PlayerAbilityAnimator {
         }
         ActiveAnimation active = ACTIVE.get(state.id);
         if (active == null) return;
-        animateRenderState(state, active.abilityId(), t, active.waterAffinity());
+        animateRenderState(state, active.abilityId(), t, active.waterAffinity(), active.durationTicks());
         if (Boolean.getBoolean("elemental.vfx.smoke") && SMOKE_POSES_APPLIED.add(active.abilityId())) {
             System.out.println("[ELEMENTAL_VFX_SMOKE] PLAYER_STATE_MODIFIED " + active.abilityId()
                     + " bodyRot=" + state.bodyRot
@@ -296,11 +298,13 @@ public final class PlayerAbilityAnimator {
         }
     }
 
-    private static void animateRenderState(AvatarRenderState state, String abilityId, float t,float waterAffinity) {
-        float charge = 1.0F - smooth(t / 0.38F);
-        float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
-        float recovery = smooth((t - 0.66F) / 0.34F);
-        float pulse = (float) Math.sin(Math.PI * clamp(t));
+    private static void animateRenderState(AvatarRenderState state, String abilityId, float t,
+                                           float waterAffinity, int durationTicks) {
+        MotionEnvelope motion = motionFor(abilityId, t);
+        float charge = motion.charge();
+        float release = motion.release();
+        float recovery = motion.recovery();
+        float pulse = motion.pulse();
 
         float bodyTurn = 0.0F;
         float bodyLean = 0.0F;
@@ -516,7 +520,7 @@ public final class PlayerAbilityAnimator {
         MODEL_POSES.put(state.id, createModelPose(abilityId, t, bodyTurn, bodyLean,waterAffinity));
         state.isCrouching = state.isCrouching || crouch;
         state.isFallFlying = state.isFallFlying || flyingPose;
-        if (flyingPose) state.fallFlyingTimeInTicks = Math.max(state.fallFlyingTimeInTicks, t * DURATION_TICKS);
+        if (flyingPose) state.fallFlyingTimeInTicks = Math.max(state.fallFlyingTimeInTicks, t * durationTicks);
         if (swimmingPose) {
             state.isVisuallySwimming = true;
             state.swimAmount = Math.max(state.swimAmount, pulse * 0.78F);
@@ -534,11 +538,16 @@ public final class PlayerAbilityAnimator {
     }
 
     private static ModelPose createModelPose(String abilityId, float t, float bodyTurn, float bodyLean,float waterAffinity) {
-        float charge = 1.0F - smooth(t / 0.38F);
-        float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
-        float pulse = (float) Math.sin(Math.PI * clamp(t));
+        MotionEnvelope motion = motionFor(abilityId, t);
+        float charge = motion.charge();
+        float release = motion.release();
+        float pulse = motion.pulse();
         float sweep = (float) Math.sin(t * Math.PI * 2.0F);
         float impact = (float) Math.sin(t * Math.PI * 4.0F);
+        if (abilityId.equals("earthquake")) {
+            impact = (float) Math.sin((t - 0.35F) * Math.PI * 12.0F)
+                    * phasePulse(t, 0.34F, 0.70F);
+        }
 
         float roll = 0.0F;
         float armPitch = 0.0F;
@@ -712,9 +721,10 @@ public final class PlayerAbilityAnimator {
 
     private static void animateArm(ModelPart arm, String abilityId, float t, float side,float waterAffinity) {
         float fluidAmplification=1.0F+(waterAffinity-1.0F)*0.42F;
-        float charge = 1.0F - smooth(t / 0.38F);
-        float release = smooth((t - 0.28F) / 0.18F) * (1.0F - smooth((t - 0.66F) / 0.34F));
-        float pulse = (float) Math.sin(Math.PI * clamp(t));
+        MotionEnvelope motion = motionFor(abilityId, t);
+        float charge = motion.charge();
+        float release = motion.release();
+        float pulse = motion.pulse();
 
         // First-person rendering has its own hook after the arm part is prepared,
         // so these rotations are applied directly at the correct time.
@@ -731,6 +741,65 @@ public final class PlayerAbilityAnimator {
                 || abilityId.equals("great_wave") || abilityId.equals("stone_wall")) {
             arm.xRot -= 0.72F * pulse*fluidAmplification;
         }
+    }
+
+
+    /**
+     * Technique-specific phase envelopes. Stone keeps its rooted preparation and
+     * sustained force through the full move instead of inheriting a two-second gesture.
+     */
+    private static MotionEnvelope motionFor(String abilityId, float t) {
+        float charge = 1.0F - smooth(t / 0.38F);
+        float release = phasePulse(t, 0.28F, 0.66F);
+        float pulse = (float) Math.sin(Math.PI * clamp(t));
+        float recovery = smooth((t - 0.66F) / 0.34F);
+        switch (abilityId) {
+            case "rock_throw" -> {
+                charge = 1.0F - smooth(t / 0.40F);
+                release = phasePulse(t, 0.39F, 0.63F);
+                recovery = smooth((t - 0.62F) / 0.38F);
+            }
+            case "stone_wall" -> {
+                charge = 1.0F - smooth(t / 0.22F);
+                release = phasePulse(t, 0.20F, 0.78F);
+                pulse = phasePulse(t, 0.18F, 0.94F);
+                recovery = smooth((t - 0.86F) / 0.14F);
+            }
+            case "rock_cage" -> {
+                charge = 1.0F - smooth(t / 0.18F);
+                release = phasePulse(t, 0.18F, 0.66F);
+                pulse = phasePulse(t, 0.20F, 0.90F);
+                recovery = smooth((t - 0.88F) / 0.12F);
+            }
+            case "seismic_wave" -> {
+                charge = 1.0F - smooth(t / 0.24F);
+                release = phasePulse(t, 0.20F, 0.72F);
+                pulse = phasePulse(t, 0.20F, 0.78F);
+                recovery = smooth((t - 0.74F) / 0.26F);
+            }
+            case "stone_armor" -> {
+                charge = 1.0F - smooth(t / 0.22F);
+                release = phasePulse(t, 0.18F, 0.48F);
+                pulse = phasePulse(t, 0.38F, 0.92F);
+                recovery = smooth((t - 0.90F) / 0.10F);
+            }
+            case "earthquake" -> {
+                charge = 1.0F - smooth(t / 0.30F);
+                release = phasePulse(t, 0.28F, 0.72F);
+                pulse = (float) Math.sin((t - 0.35F) * Math.PI * 12.0F)
+                        * phasePulse(t, 0.34F, 0.70F);
+                recovery = smooth((t - 0.76F) / 0.24F);
+            }
+            default -> {
+            }
+        }
+        return new MotionEnvelope(charge, release, pulse, recovery);
+    }
+
+    private static float phasePulse(float t, float start, float end) {
+        if (end <= start) return 0.0F;
+        return smooth((t - start) / (end - start))
+                * (1.0F - smooth((t - end) / Math.max(0.0001F, 1.0F - end)));
     }
 
     private static float smooth(float value) {
