@@ -18,26 +18,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.2.1'
-      - name: Install virtual display and software rendering
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xdotool x11-utils libx11-xcb1 libxcb-cursor0 libxcursor1 libxrandr2 libxinerama1 libxi6 libxfixes3 libxss1 libxtst6 libxkbcommon0 libxkbcommon-x11-0 libgl1-mesa-dri libglx-mesa0 mesa-utils libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg
-      - name: Verify virtual graphics backends
-        env:
-          LIBGL_ALWAYS_SOFTWARE: '1'
-          MESA_GL_VERSION_OVERRIDE: '4.5'
-          SDL_VIDEO_DRIVER: x11
-        run: |
-          xvfb-run -a -e "$RUNNER_TEMP/xvfb-verify.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
-            LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
-            test -n "$LVP_ICD"
-            export VK_ICD_FILENAMES="$LVP_ICD"
-            glxinfo -B > "$RUNNER_TEMP/glx-info.txt" 2>&1 || true
-            vulkaninfo --summary > "$RUNNER_TEMP/vulkan-info.txt" 2>&1
-            grep -q "VK_KHR_surface" "$RUNNER_TEMP/vulkan-info.txt"
-            grep -q "VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
-            grep -E "deviceName|driverName|VK_KHR_surface|VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
-          '
       - name: Build mod
         run: gradle clean build --no-daemon --refresh-dependencies --stacktrace
       - name: Prepare standalone downloadable mod JAR
@@ -71,6 +51,26 @@ jobs:
           path: dist-download/
           if-no-files-found: error
           retention-days: 30
+      - name: Install virtual display and software rendering
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool x11-utils libx11-xcb1 libxcb-cursor0 libxcursor1 libxrandr2 libxinerama1 libxi6 libxfixes3 libxss1 libxtst6 libxkbcommon0 libxkbcommon-x11-0 libgl1-mesa-dri libglx-mesa0 mesa-utils libvulkan1 mesa-vulkan-drivers vulkan-tools ffmpeg
+      - name: Verify virtual graphics backends
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          MESA_GL_VERSION_OVERRIDE: '4.5'
+          SDL_VIDEODRIVER: x11
+        run: |
+          xvfb-run -a -e "$RUNNER_TEMP/xvfb-verify.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
+            LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
+            test -n "$LVP_ICD"
+            export VK_ICD_FILENAMES="$LVP_ICD"
+            glxinfo -B > "$RUNNER_TEMP/glx-info.txt" 2>&1 || true
+            vulkaninfo --summary > "$RUNNER_TEMP/vulkan-info.txt" 2>&1
+            grep -q "VK_KHR_surface" "$RUNNER_TEMP/vulkan-info.txt"
+            grep -q "VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
+            grep -E "deviceName|driverName|VK_KHR_surface|VK_KHR_xlib_surface" "$RUNNER_TEMP/vulkan-info.txt"
+          '
       - name: Start dedicated Minecraft server
         shell: bash
         run: |
@@ -117,7 +117,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
-          SDL_VIDEO_DRIVER: x11
+          SDL_VIDEODRIVER: x11
           ALSOFT_DRIVERS: 'null'
         run: |
           cat > "$RUNNER_TEMP/rcon_smoke.py" <<'PY'
@@ -431,7 +431,7 @@ jobs:
             LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
-            export SDL_VIDEO_DRIVER=x11
+            export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
             # Minecraft 26.3 uses SDL3: force its current driver variable and remove inherited
             # Wayland session hints so SDL cannot select a host compositor outside this Xvfb.
@@ -440,7 +440,7 @@ jobs:
             # through the Gradle single-use daemon to the LWJGL/SDL child process.
             unset XAUTHORITY
 
-            echo "SDL3/X11 preflight: DISPLAY=$DISPLAY SDL_VIDEO_DRIVER=$SDL_VIDEO_DRIVER XAUTHORITY=${XAUTHORITY:-<unset>} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>}"
+            echo "SDL3/X11 preflight: DISPLAY=$DISPLAY SDL_VIDEODRIVER=$SDL_VIDEODRIVER XAUTHORITY=${XAUTHORITY:-<unset>} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>}"
             ldconfig -p | grep -E "lib(X11|Xrandr|Xcursor|Xi|Xfixes|Xss|Xtst|xkbcommon)" || true
             xdpyinfo -display "$DISPLAY" >/dev/null
             xdotool getdisplaygeometry
@@ -488,7 +488,7 @@ jobs:
                     echo "Client process environment:"
                     for pid in $(pgrep -f "net.neoforged.devlaunch.Main|net.neoforged.fml.startup.Client" || true); do
                       echo "PID=$pid"
-                      tr "\\0" "\\n" < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER)=" || true
+                      tr "\\0" "\\n" < "/proc/$pid/environ" | grep -E "^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEODRIVER|SDL_VIDEODRIVER)=" || true
                     done
                   else
                     echo "Gradle client wrapper exited before creating a window."
