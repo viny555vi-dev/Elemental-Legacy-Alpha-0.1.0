@@ -51,6 +51,7 @@ public final class ElementalAbilityService {
         Vec3 origin=player.getEyePosition();
         // A real vanilla arm swing is synchronized to observers; the impulse adds a visible body action.
         player.swing(InteractionHand.MAIN_HAND,new SwingAnimation(SwingAnimationType.WHACK,9),true);
+        if (ability == ElementalAbility.STONE_ARMOR) StoneArmorService.activate(player);
         applyBodyMotion(player,ability,look);
         float waterAffinity=WaterAffinity.forAbility(player,ability.id());
         int hits=applyCombat(level,player,ability,origin,look,waterAffinity);
