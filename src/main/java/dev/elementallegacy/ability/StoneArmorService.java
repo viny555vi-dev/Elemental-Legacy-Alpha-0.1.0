@@ -130,7 +130,6 @@ public final class StoneArmorService {
         // The armor's mass reduces vertical take-off without disabling the jump.
         Vec3 motion = player.getDeltaMovement();
         player.setDeltaMovement(motion.x, motion.y * 0.85D, motion.z);
-        player.hurtMarked = true;
     }
 
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
