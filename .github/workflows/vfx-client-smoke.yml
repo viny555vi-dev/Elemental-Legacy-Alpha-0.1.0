@@ -59,6 +59,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
+          SDL_VIDEO_DRIVER: x11
           SDL_VIDEODRIVER: x11
         run: |
           xvfb-run -a -e "$RUNNER_TEMP/xvfb-verify.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset' bash -lc '
@@ -117,6 +118,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           MESA_GL_VERSION_OVERRIDE: '4.5'
+          SDL_VIDEO_DRIVER: x11
           SDL_VIDEODRIVER: x11
           ALSOFT_DRIVERS: 'null'
         run: |
@@ -427,10 +429,11 @@ jobs:
           PY
 
           set +e
-          xvfb-run -a -e "$RUNNER_TEMP/xvfb-client.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset -ac' bash -lc '
+          xvfb-run -a -e "$RUNNER_TEMP/xvfb-client.log" -s '-screen 0 1280x720x24 +extension GLX +render -noreset -ac' bash -lc "$(cat <<'CLIENT_SCRIPT'
             LVP_ICD="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name "lvp_icd*.json" | head -n 1)"
             test -n "$LVP_ICD"
             export VK_ICD_FILENAMES="$LVP_ICD"
+            export SDL_VIDEO_DRIVER=x11
             export SDL_VIDEODRIVER=x11
             export ALSOFT_DRIVERS=null
             # Minecraft 26.3 uses SDL3: force its current driver variable and remove inherited
@@ -440,10 +443,19 @@ jobs:
             # through the Gradle single-use daemon to the LWJGL/SDL child process.
             unset XAUTHORITY
 
-            echo "SDL3/X11 preflight: DISPLAY=$DISPLAY SDL_VIDEODRIVER=$SDL_VIDEODRIVER XAUTHORITY=${XAUTHORITY:-<unset>} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>}"
+            echo "SDL3/X11 preflight: DISPLAY=$DISPLAY SDL_VIDEO_DRIVER=$SDL_VIDEO_DRIVER SDL_VIDEODRIVER=$SDL_VIDEODRIVER XAUTHORITY=${XAUTHORITY:-<unset>} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>}"
             ldconfig -p | grep -E "lib(X11|Xrandr|Xcursor|Xi|Xfixes|Xss|Xtst|xkbcommon)" || true
             xdpyinfo -display "$DISPLAY" >/dev/null
-            xdotool getdisplaygeometry
+            {
+              echo "=== SDL/X11 preflight ==="
+              env | sort | grep -E '^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER|LIBGL_ALWAYS_SOFTWARE|MESA_GL_VERSION_OVERRIDE)=' || true
+              echo "=== X11 runtime libraries ==="
+              ldconfig -p | grep -E 'lib(X11|Xrandr|Xcursor|Xi|Xfixes|Xss|Xtst|xkbcommon|xcb)' || true
+              echo "=== X server ==="
+              xdpyinfo -display "$DISPLAY" | head -25
+              xdotool getdisplaygeometry
+            } > "$RUNNER_TEMP/sdl-diagnostics.txt" 2>&1
+            cat "$RUNNER_TEMP/sdl-diagnostics.txt"
 
             ffmpeg -y -stats_period 0.05 -progress "$RUNNER_TEMP/ffmpeg-progress.txt" -nostats -f x11grab -framerate 20 -video_size 1280x720 -i "$DISPLAY" -t 260 -an -c:v libx264 -preset ultrafast -pix_fmt yuv420p "$RUNNER_TEMP/vfx-client-smoke.mp4" > "$RUNNER_TEMP/ffmpeg.log" 2>&1 &
             CAPTURE_PID=$!
@@ -470,6 +482,18 @@ jobs:
             timeout 260s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
             echo "Started Minecraft client timeout wrapper PID=$CLIENT_PID"
+            sleep 3
+            {
+              echo "=== Minecraft/Gradle process environment ==="
+              for pid in $(pgrep -f '[n]et.neoforged.devlaunch.Main|[n]et.neoforged.fml.startup.Client|[o]rg.gradle.launcher.daemon.bootstrap.GradleDaemon|[G]radleWrapperMain' || true); do
+                echo "--- PID $pid ---"
+                ps -fp "$pid" || true
+                tr '\0' '\n' < "/proc/$pid/environ" | grep -E '^(DISPLAY|XAUTHORITY|WAYLAND_DISPLAY|XDG_SESSION_TYPE|SDL_VIDEO_DRIVER|SDL_VIDEODRIVER|LIBGL_ALWAYS_SOFTWARE|MESA_GL_VERSION_OVERRIDE)=' || true
+              done
+              echo "=== SDL3 native library and dynamic dependencies ==="
+              find "$HOME/.gradle/caches" "$RUNNER_TEMP" "$PWD/run" -type f \( -name 'libSDL3.so' -o -name 'libSDL3.so.*' \) -print -exec ldd {} \; 2>/dev/null || true
+            } >> "$RUNNER_TEMP/sdl-diagnostics.txt" 2>&1
+            cat "$RUNNER_TEMP/sdl-diagnostics.txt"
 
             # Wait for the actual client JVM and completed resource initialization.
             # The timeout wrapper can exit while its Gradle/Java child is still starting;
@@ -654,7 +678,8 @@ jobs:
             if [ "$CLIENT_RC" -ne 0 ] && [ "$CLIENT_RC" -ne 124 ]; then
               exit "$CLIENT_RC"
             fi
-          '
+          CLIENT_SCRIPT
+          )"
           XVFB_RC=$?
           echo "xvfb/client wrapper exit: $XVFB_RC"
           python3 "$RUNNER_TEMP/extract_vfx_evidence.py" "$RUNNER_TEMP"
@@ -681,6 +706,7 @@ jobs:
             ${{ runner.temp }}/vulkan-info.txt
             ${{ runner.temp }}/xvfb-verify.log
             ${{ runner.temp }}/xvfb-client.log
+            ${{ runner.temp }}/sdl-diagnostics.txt
             ${{ runner.temp }}/vfx-evidence/
             ${{ runner.temp }}/stone-server-evidence/
           if-no-files-found: warn
