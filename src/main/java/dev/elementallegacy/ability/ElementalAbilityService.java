@@ -700,7 +700,7 @@ public final class ElementalAbilityService {
                 double z = player.getZ() + Math.sin(angle) * distance
                         + Math.sin(angle + Math.PI / 2.0D) * perpendicularJitter;
                 BlockPos ground = surfaceBlock(level, new Vec3(x, player.getY(), z)).below();
-                if (!level.hasChunkAt(ground) || ground.getY() <= level.getMinBuildHeight()
+                if (!level.hasChunkAt(ground) || level.isOutsideBuildHeight(ground)
                         || !player.mayInteract(level, ground)
                         || level.getBlockEntity(ground) != null
                         || !modified.add(ground)) {
