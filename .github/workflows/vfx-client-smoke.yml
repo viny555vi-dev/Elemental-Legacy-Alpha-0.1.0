@@ -464,13 +464,16 @@ jobs:
             fi
             CAPTURE_START_MS=$(date +%s%3N)
             echo $((CAPTURE_START_MS - 50)) > "$RUNNER_TEMP/capture-start-ms.txt"
+            echo "Client launch environment: PATH=$PATH"
+            echo "Gradle executable: $(command -v gradle || echo MISSING)"
+            echo "Timeout executable: $(command -v timeout || echo MISSING)"
             timeout 260s gradle runClient -PelementalSmoke --no-daemon --max-workers=2 --stacktrace > "$RUNNER_TEMP/client.log" 2>&1 &
             CLIENT_PID=$!
+            echo "Started Minecraft client timeout wrapper PID=$CLIENT_PID"
 
-            # Dismiss Minecraft 26.3's first-run accessibility welcome screen only
-            # after the client has finished creating its sound engine and texture atlases.
-            # "Setting user" occurs several seconds earlier; clicking at that point races
-            # the screen construction and leaves the client on the welcome modal forever.
+            # Wait for the actual client JVM and completed resource initialization.
+            # The timeout wrapper can exit while its Gradle/Java child is still starting;
+            # checking only CLIENT_PID can therefore abort before client.log receives output.
             UI_READY=0
             for i in $(seq 1 120); do
               if grep -q "Sound engine started" "$RUNNER_TEMP/client.log" \
@@ -479,13 +482,26 @@ jobs:
                 break
               fi
               if ! kill -0 "$CLIENT_PID" 2>/dev/null; then
-                break
+                LIVE_JVM=$(pgrep -f '[n]et.neoforged.devlaunch.Main|[n]et.neoforged.fml.startup.Client|[o]rg.gradle.launcher.daemon.bootstrap.GradleDaemon|[G]radleWrapperMain' | head -n 1 || true)
+                if [ -z "$LIVE_JVM" ]; then
+                  set +e
+                  wait "$CLIENT_PID"
+                  CLIENT_EXIT=$?
+                  set -e
+                  echo "Minecraft client launcher exited before UI readiness (exit=$CLIENT_EXIT)."
+                  ps -ef | grep -E 'gradle|Gradle|DevLaunch|fml.startup.Client' | grep -v grep || true
+                  tail -200 "$RUNNER_TEMP/client.log" || true
+                  exit 20
+                fi
+                echo "Timeout wrapper PID ended; Gradle/Java startup process is still present: $LIVE_JVM"
               fi
               sleep 1
             done
             if [ "$UI_READY" -ne 1 ]; then
-              echo "Minecraft UI did not finish resource initialization; refusing to send early input."
-              tail -160 "$RUNNER_TEMP/client.log" || true
+              echo "Minecraft UI did not finish resource initialization within 120 seconds."
+              echo "Client launcher PID=$CLIENT_PID"
+              ps -ef | grep -E 'gradle|Gradle|DevLaunch|fml.startup.Client' | grep -v grep || true
+              tail -200 "$RUNNER_TEMP/client.log" || true
               exit 20
             fi
 
